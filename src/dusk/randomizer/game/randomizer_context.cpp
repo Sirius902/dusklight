@@ -621,6 +621,23 @@ int RandomizerState::execute() {
         handleFoolishItem();
     }
 
+    // The temp tracker flags bridge the gap between an item get and its real
+    // save flag being written. Expire each once the real flag reads back, so
+    // a stale bridge can never report an uncollected location as checked
+    // (e.g. after reloading an older save).
+    if (mTrackerTempEventFlag != 0 && dComIfGs_isEventBit(mTrackerTempEventFlag)) {
+        mTrackerTempEventFlag = 0;
+    }
+    if (mTrackerTempSwitchFlag.flag >= 0 &&
+        dComIfGs_isStageSwitch(mTrackerTempSwitchFlag.stage, mTrackerTempSwitchFlag.flag)) {
+        mTrackerTempSwitchFlag = {};
+    }
+    if (mTrackerTempItemFlag.stage >= 0 && mTrackerTempItemFlag.flag >= 0x80 &&
+        g_dComIfG_gameInfo.info.getSavedata().getSave(mTrackerTempItemFlag.stage).getBit().isItem(
+            mTrackerTempItemFlag.flag - 0x80)) {
+        mTrackerTempItemFlag = {};
+    }
+
     dusk::archi::ArchipelagoContext::Execute();
 
     return 1;
@@ -866,9 +883,9 @@ static void randomizer_setTempFlag(RandomizerContext::itemLocationData data) {
         g_randomizerState.mTrackerTempSwitchFlag.flag = data.flag;
     }
     // Otherwise it's an item flag. Currently, any item flags that go through here are custom
-    // so we just set the bit directly.
+    // so we just set the bit directly, on the location's stage rather than the loaded one.
     else {
-        dComIfGs_onItem(data.flag, getStageSaveId(data.stage));
+        dComIfGs_onStageItem(getStageSaveId(data.stage), data.flag);
     }
 }
 

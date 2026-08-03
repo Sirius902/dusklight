@@ -88,6 +88,12 @@ private:
     /* 0x99C */ dPa_followEcallBack mEffect2;
     /* 0x9B0 */ Z2SoundObjSimple mSound;
     /* 0x9D0 */ u8 mIsHookCarry;
+#if TARGET_PC
+    // golden wolf replacement flags; home.angle can't hold these because
+    // home.angle.z doubles as the foolish item model id slot
+    u8 mGoldenWolfMapMarkerSw{0xFF};
+    u16 mGoldenWolfEventFlag{0xFFFF};
+#endif
 };
 
 STATIC_ASSERT(sizeof(daObjLife_c) == 0x9d4);

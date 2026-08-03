@@ -216,8 +216,8 @@ int daObjLife_c::create() {
                     }
                 // Store the map marker flag and obtained item flags to turn off/on later if
                 // the player collects the item
-                home.angle.z = goldenWolfFlags.mapMarkerFlag;
-                home.angle.x = static_cast<s16>(goldenWolfFlags.obtainedItemFlag);
+                mGoldenWolfMapMarkerSw = goldenWolfFlags.mapMarkerFlag;
+                mGoldenWolfEventFlag = goldenWolfFlags.obtainedItemFlag;
                 // Set the overriden item id
                 auto& goldenWolfOverrides = randomizer_GetContext().mGoldenWolfOverrides;
                 itemId = verifyProgressiveItem(goldenWolfOverrides[goldenWolfFlags.obtainedItemFlag]);
@@ -528,17 +528,22 @@ int daObjLife_c::actionGetDemo() {
         u8 savebit = getSaveBitNo();
         if (savebit != 0xFF) {
             fopAcM_onItem(this, savebit);
+#if TARGET_PC
+            // the real flag is written now, so the tracker bridge flag can expire
+            if (randomizer_IsActive()) {
+                g_randomizerState.mTrackerTempItemFlag = {};
+            }
+#endif
         }
 #if TARGET_PC
         // In randomizer, turn off the map marker flag for this golden wolf replacement item
-        // if we're collecting it. We store the map marker flag in unused home.angle.z
-        // Also set the flag for having collected this golden wolf item, stored in home.angle.x
+        // if we're collecting it. Also set the flag for having collected this golden wolf item.
         if (randomizer_IsActive()) {
-            if (static_cast<u16>(home.angle.z) != 0xFFFF) {
-                dComIfGs_offSwitch(static_cast<u16>(home.angle.z), fopAcM_GetRoomNo(this));
+            if (mGoldenWolfMapMarkerSw != 0xFF) {
+                dComIfGs_offSwitch(mGoldenWolfMapMarkerSw, fopAcM_GetRoomNo(this));
             }
-            if (static_cast<u16>(home.angle.x) != 0xFFFF) {
-                dComIfGs_onEventBit(static_cast<u16>(home.angle.x));
+            if (mGoldenWolfEventFlag != 0xFFFF) {
+                dComIfGs_onEventBit(mGoldenWolfEventFlag);
             }
         }
 #endif

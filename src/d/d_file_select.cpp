@@ -1067,6 +1067,14 @@ void dFile_select_c::dataSelectStart() {
 
         // Load the randomizer seed if one is tied to this file
         auto curFileSeedHash = dusk::getSettings().randomizer.seedHashes.at(mSelectNum).getValue();
+
+        // Always drop the temp tracker flags: save state is re-read from disk
+        // even when re-entering the same file, so a bridge flag from the
+        // previous session may describe progress that was never saved
+        g_randomizerState.mTrackerTempEventFlag = 0;
+        g_randomizerState.mTrackerTempSwitchFlag = {};
+        g_randomizerState.mTrackerTempItemFlag = {};
+
         // If this is a vanilla file, clear rando data structures
         if (curFileSeedHash.empty()) {
             g_randomizerState = RandomizerState();
