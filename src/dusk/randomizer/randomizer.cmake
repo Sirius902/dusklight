@@ -97,18 +97,18 @@ FetchContent_Populate(nlohmann_json)
 FetchContent_Populate(apclientpp)
 
 add_library(websocketpp INTERFACE)
-target_include_directories(websocketpp INTERFACE ${websocketpp_SOURCE_DIR})
+target_include_directories(websocketpp SYSTEM INTERFACE ${websocketpp_SOURCE_DIR})
 target_compile_definitions(websocketpp INTERFACE _WEBSOCKETPP_CPP11_STL_)
 
 add_library(asio INTERFACE)
-target_include_directories(asio INTERFACE ${asio_SOURCE_DIR}/asio/include)
+target_include_directories(asio SYSTEM INTERFACE ${asio_SOURCE_DIR}/asio/include)
 target_compile_definitions(asio INTERFACE ASIO_STANDALONE)
 
 add_library(wswrap INTERFACE)
-target_include_directories(wswrap INTERFACE ${wswrap_SOURCE_DIR}/include)
+target_include_directories(wswrap SYSTEM INTERFACE ${wswrap_SOURCE_DIR}/include)
 
 add_library(apclientpp INTERFACE)
-target_include_directories(apclientpp INTERFACE
+target_include_directories(apclientpp SYSTEM INTERFACE
         ${apclientpp_SOURCE_DIR}
         ${nlohmann_json_SOURCE_DIR}/include)
 target_compile_definitions(apclientpp INTERFACE AP_NO_SCHEMA)
