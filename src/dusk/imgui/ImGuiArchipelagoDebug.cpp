@@ -51,11 +51,11 @@ void ImGuiArchipelagoDebug::drawWindow() {
 
     static bool isSimulateDeathLink = false;
 
-    if (ImGui::Button("Request Death Link")) {
+    if (ImGui::Button("Request Death")) {
         archi::ArchipelagoContext::RequestPlayerDeath(isSimulateDeathLink);
     }
     ImGui::SameLine();
-    ImGui::Checkbox("Simulate Death Link", &isSimulateDeathLink);
+    ImGui::Checkbox("As DeathLink (suppress echo)", &isSimulateDeathLink);
 
     ImGui::End();
 }

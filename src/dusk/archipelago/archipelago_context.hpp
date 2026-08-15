@@ -169,7 +169,7 @@ namespace dusk::archi
 
         static void InitApSaveBlock();
 
-        static void RequestAllLocationScout(bool isHint = false);
+        static void RequestAllLocationScout();
 
         static void RequestPlayerDeath(bool isDeathLink = false);
 

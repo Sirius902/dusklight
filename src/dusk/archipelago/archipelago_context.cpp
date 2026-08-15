@@ -180,6 +180,7 @@ void ArchipelagoContext::LoadTempItemInfo() {
 }
 
 void ArchipelagoContext::LoadTempLocationInfo() {
+    m_apLocToGameLoc.clear();
     auto locDataTree = LOAD_EMBED_YAML(RANDO_DATA_PATH "locations.yaml");
     for (const auto& locNode : locDataTree) {
         const auto& metadata = locNode["Metadata"];
@@ -366,6 +367,7 @@ void ArchipelagoContext::ConnectToServer(int file) {
     std::filesystem::create_directories(randoPath);
     auto uuid = ap_get_uuid((randoPath / "ap_uuid.dat").string(), uri);
 
+    instance().m_client.reset();
     instance().m_dataPackageStore = std::make_unique<DefaultDataPackageStore>();
     instance().m_client = std::make_unique<APClient>(
         uuid, "Twilight Princess", uri, "", instance().m_dataPackageStore.get());
@@ -374,8 +376,11 @@ void ArchipelagoContext::ConnectToServer(int file) {
 
     client.set_room_info_handler([]() {
         instance().m_seedName = instance().m_client->get_seed();
+        std::list<std::string> tags;
+        if (instance().m_isEnableDeathLink)
+            tags.push_back("DeathLink");
         instance().m_client->ConnectSlot(
-            instance().m_slotName, instance().m_password, 0b111, {});
+            instance().m_slotName, instance().m_password, 0b111, tags);
     });
 
     client.set_slot_connected_handler([](const nlohmann::json& slotData) {
@@ -851,7 +856,7 @@ void ArchipelagoContext::TryHandleDeathLink() {
 
     try {
         nlohmann::json deathData = {
-            {"time", std::time(nullptr)},
+            {"time", instance().m_client->get_server_time()},
             {"cause", fmt::format("{} was unable to become the Hero of Twilight.",
                                   instance().m_client->get_slot())},
             {"source", instance().m_client->get_slot()}
@@ -873,14 +878,14 @@ bool ArchipelagoContext::TryHandleGameComplete() {
     return true;
 }
 
-void ArchipelagoContext::RequestAllLocationScout(bool isHint) {
+void ArchipelagoContext::RequestAllLocationScout() {
     if (!instance().m_client) return;
     std::list<int64_t> locations;
-    for (int i = 0; i < 475; i++) {
-        locations.push_back(ARCHI_ITEM_OFFSET + i);
+    for (const auto& entry : instance().m_apLocToGameLoc) {
+        locations.push_back(ARCHI_ITEM_OFFSET + entry.apId);
     }
 
-    instance().m_client->LocationScouts(locations, isHint ? 1 : 0);
+    instance().m_client->LocationScouts(locations, 0);
 }
 
 void ArchipelagoContext::RequestPlayerDeath(bool isDeathLink) {
