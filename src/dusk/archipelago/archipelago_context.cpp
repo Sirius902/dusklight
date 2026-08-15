@@ -415,6 +415,12 @@ void ArchipelagoContext::ConnectToServer(int file) {
             return;
         }
 
+        if (instance().m_goalReached) {
+            instance().m_client->StatusUpdate(APClient::ClientStatus::GOAL);
+        } else {
+            instance().m_client->StatusUpdate(APClient::ClientStatus::PLAYING);
+        }
+
         instance().m_connectionPhase = ConnectionPhase::SLOT_CONNECTED;
         instance().m_connectStartTime = std::chrono::steady_clock::now();
         RequestAllLocationScout();
@@ -849,8 +855,13 @@ void ArchipelagoContext::TryHandleDeathLink() {
 }
 
 bool ArchipelagoContext::TryHandleGameComplete() {
+    instance().m_goalReached = true;
     if (!instance().m_client) return false;
-    instance().m_client->StatusUpdate(APClient::ClientStatus::GOAL);
+    try {
+        instance().m_client->StatusUpdate(APClient::ClientStatus::GOAL);
+    } catch (const std::exception& e) {
+        DuskLog.error("[AP] Failed to send GOAL: {}", e.what());
+    }
     return true;
 }
 

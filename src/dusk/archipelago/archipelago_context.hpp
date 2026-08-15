@@ -89,6 +89,7 @@ namespace dusk::archi
         std::string m_SettingsFile;
         bool m_isNeedPlayerDeath = false;
         bool m_isFromDeathLink = false;
+        bool m_goalReached = false;
 
         // TEMP
         std::map<int, TEMP_GameItemInfo> m_apItemToGameItem;
