@@ -371,7 +371,8 @@ int RandomizerState::_create() {
     mInitialized = true;
     mEventItemStatus = QUEUE_EMPTY;
     mHasPendingToDChange = false;
-    // g_customMenuRing._initialize();
+    mTrackerTempSwitchFlag = {-1, -1};
+    mTrackerTempItemFlag = {-1, -1};
     for (int i = 0; i < EVENT_ITEM_QUEUE_SIZE; i++) {
         mEventItemQueue[i] = 0;
     }
@@ -633,6 +634,8 @@ void RandomizerState::handlePoeItem(u8 bitSw)
 {
     u16 key = getStageID() << 8 | bitSw;
     u8 item = randomizer_GetContext().mPoeOverrides[key];
+    mTrackerTempSwitchFlag.stage = getStageSaveId(getStageID());
+    mTrackerTempSwitchFlag.flag = bitSw;
     addItemToEventQueue(item);
     daAlink_getAlinkActorClass()->procWolfAtnActorMoveInit();
 }
