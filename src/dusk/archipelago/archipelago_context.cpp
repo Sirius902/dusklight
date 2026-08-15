@@ -621,7 +621,12 @@ void ArchipelagoContext::Poll() {
     }
 
     if (inst.m_connectionPhase == ConnectionPhase::GENERATING) {
-        GenerateLocalWorldData();
+        if (!GenerateLocalWorldData()) {
+            DuskLog.error("[AP] World generation failed.");
+            inst.m_connectionPhase = ConnectionPhase::ERROR;
+            ResetSession();
+            return;
+        }
 
         if (!inst.m_client) return;
 
@@ -1041,22 +1046,27 @@ void ArchipelagoContext::LoadRandomizerContext() {
     randomizer_GetContext().mHash = GetArchipelagoSeedName();
 }
 
-void ArchipelagoContext::GenerateLocalWorldData() {
+bool ArchipelagoContext::GenerateLocalWorldData() {
+    if (instance().m_archiWorld != nullptr && !instance().m_seedName.empty()) {
+        return true;
+    }
+
     bool createContext = false;
     std::filesystem::path workingDir;
 
     GetSeedDirectoryPath(workingDir);
 
-    if (std::filesystem::exists(workingDir)) {
+    bool hasSeedDat = std::filesystem::exists(workingDir / "seed.dat");
+
+    if (hasSeedDat) {
         instance().m_config.LoadFromFile(workingDir / "settings.yaml", workingDir / "preferences.yaml");
-    }else {
+    } else {
         std::filesystem::create_directories(workingDir);
-        // creates base yamls at directory if they dont exist yet
         instance().m_config.LoadFromFile(workingDir / "settings.yaml", workingDir / "preferences.yaml");
 
         if (instance().m_SettingsFile.empty()) {
-            DuskLog.fatal("Settings Data was not sent to client! Unable to generate world data.");
-            return;
+            DuskLog.error("[AP] Settings Data was not sent to client.");
+            return false;
         }
 
         GenerateConfigFromAP(instance().m_config, instance().m_SettingsFile);
@@ -1072,8 +1082,15 @@ void ArchipelagoContext::GenerateLocalWorldData() {
 
     if (createContext) {
         CreateRandomizerContext();
-    }else {
-        LoadRandomizerContext();
+    } else {
+        try {
+            LoadRandomizerContext();
+        } catch (const std::exception& e) {
+            DuskLog.error("[AP] Failed to load randomizer context: {}", e.what());
+            return false;
+        }
     }
+
+    return true;
 }
 } // dusk::archi

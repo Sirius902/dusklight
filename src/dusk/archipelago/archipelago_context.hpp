@@ -188,7 +188,7 @@ namespace dusk::archi
 
         static void LoadRandomizerContext();
 
-        static void GenerateLocalWorldData();
+        static bool GenerateLocalWorldData();
 
     };
 } // dusk::archi

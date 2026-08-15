@@ -31,15 +31,18 @@ void ImGuiArchipelagoDebug::drawWindow() {
     ImGui::Begin("Archipelago Debug", &m_drawWindow);
 
     if (archi::ArchipelagoContext::GetConnectionPhase() != archi::ArchipelagoContext::ConnectionPhase::IDLE) {
-        if (ImGui::Button("Test Create World Data")) {
-            archi::ArchipelagoContext::GenerateLocalWorldData();
+        if (archi::ArchipelagoContext::IsConnected()) {
+            if (ImGui::Button("Test Create World Data")) {
+                archi::ArchipelagoContext::GenerateLocalWorldData();
+            }
         }
 
         if (ImGui::Button("Disconnect")) {
             archi::ArchipelagoContext::DisconnectFromServer();
         }
-    }else {
+    } else {
         if (ImGui::Button("Connect")) {
+            archi::ArchipelagoContext::DisconnectFromServer();
             archi::ArchipelagoContext::ConnectToServer(dComIfGs_getDataNum());
         }
     }
