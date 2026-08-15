@@ -1041,6 +1041,20 @@ void dFile_select_c::dataSelectStart() {
         dusk::archi::ArchipelagoContext::SetCandidateSaveBlock(
             mSelectNum, &mSaveData[mSelectNum]);
 
+        {
+            auto& seedHash = dusk::getSettings().randomizer.seedHashes.at(mSelectNum);
+            if (seedHash.getValue().empty()) {
+                dSv_save_c* pSave = (dSv_save_c*)&mSaveData[mSelectNum];
+                if (pSave->reserve.isApValid()) {
+                    const char* name = pSave->reserve.getApSeedName();
+                    if (name && name[0] != '\0') {
+                        seedHash.setValue(std::string("AP_") + name);
+                        dusk::config::Save();
+                    }
+                }
+            }
+        }
+
         // Load the randomizer seed if one is tied to this file
         auto curFileSeedHash = dusk::getSettings().randomizer.seedHashes.at(mSelectNum).getValue();
         // If this is a vanilla file, clear rando data structures
