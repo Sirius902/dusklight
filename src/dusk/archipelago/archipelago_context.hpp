@@ -2,11 +2,20 @@
 
 #include <chrono>
 #include <string>
+#include <vector>
 
 #include "apclient.hpp"
 
 namespace dusk::archi
 {
+    struct ReceivedItem {
+        int index = -1;
+        int itemId = -1;
+        bool notify = false;
+        int player = -1;
+        int64_t location = -1;
+    };
+
     class ArchipelagoContext {
     public:
         enum class ConnectionPhase {
@@ -38,13 +47,12 @@ namespace dusk::archi
             bool collected = false;
         };
 
-        std::vector<std::pair<int, bool>> m_receivedItemsQueue;
+        std::vector<ReceivedItem> m_receivedItemsQueue;
 
         // AP Client
         std::unique_ptr<APDataPackageStore> m_dataPackageStore;
         std::unique_ptr<APClient> m_client;
         ConnectionPhase m_connectionPhase = ConnectionPhase::IDLE;
-        size_t m_itemIndex = 0;
         std::string m_seedName;
         int m_slot = -1;
         std::string m_slotName;
@@ -55,11 +63,13 @@ namespace dusk::archi
         bool m_hasEverConnected = false;
         bool m_pendingDisconnect = false;
 
+        // Per-save cursor
+        uint64_t m_seedSlotKey = 0;
+
         // Rando Data
         randomizer::seedgen::config::Config m_config;
         std::unique_ptr<randomizer::logic::world::World> m_archiWorld = nullptr;
         bool m_isUpdateLocations = false;
-        bool m_isNeedResetInv = false;
         bool m_isAllowUpdateLocations = false;
         bool m_isEnableDeathLink = false;
 
@@ -85,6 +95,10 @@ namespace dusk::archi
         std::string getLocationNameFromApId(int apId) const;
 
         bool tryKillPlayer();
+
+        void resolveReceivedItems();
+
+        bool validateSaveCursor();
     public:
         ArchipelagoContext();
 

@@ -1,15 +1,20 @@
 #include <dusk/archipelago/archipelago_context.hpp>
 
 #include <chrono>
+#include <cstring>
 #include <ctime>
 #include <list>
+#include <set>
 
 #include "apuuid.hpp"
 #include "defaultdatapackagestore.hpp"
 #include "d/d_item.h"
+#include "d/d_save.h"
 #include "d/actor/d_a_alink.h"
+#include "d/d_com_inf_game.h"
 #include "dusk/config.hpp"
 #include "dusk/logging.h"
+#include "dusk/randomizer/game/randomizer_context.hpp"
 #include "dusk/randomizer/game/tools.h"
 #include "dusk/randomizer/game/verify_item_functions.h"
 #include "dusk/randomizer/generator/logic/hints.hpp"
@@ -20,6 +25,22 @@ namespace dusk::archi
 {
 
 static constexpr int ARCHI_ITEM_OFFSET = 2320000;
+
+static uint64_t fnv1a64(std::string_view data) {
+    uint64_t hash = 0xcbf29ce484222325ULL;
+    for (auto c : data) {
+        hash ^= static_cast<uint8_t>(c);
+        hash *= 0x100000001b3ULL;
+    }
+    return hash;
+}
+
+static uint64_t computeSeedSlotKey(const std::string& seedName, const std::string& slotName) {
+    std::string combined = seedName;
+    combined.push_back('\0');
+    combined += slotName;
+    return fnv1a64(combined);
+}
 
 struct SettingsNameConvert {
     static constexpr std::string kDefaultYes = "On";
@@ -362,13 +383,10 @@ void ArchipelagoContext::ConnectToServer(int file) {
             instance().m_client->ConnectUpdate(false, 0, true, {"DeathLink"});
         }
 
-        // Reconnection detection
-        if (instance().m_archiWorld != nullptr) {
-            instance().m_isNeedResetInv = true;
-            instance().m_itemIndex = 0;
-            instance().m_receivedItemsQueue.clear();
-            instance().m_locationItemInfo.clear();
-        }
+        instance().m_receivedItemsQueue.clear();
+
+        instance().m_seedSlotKey = computeSeedSlotKey(
+            instance().m_seedName, instance().m_slotName);
 
         instance().m_connectionPhase = ConnectionPhase::SLOT_CONNECTED;
         instance().m_connectStartTime = std::chrono::steady_clock::now();
@@ -399,38 +417,19 @@ void ArchipelagoContext::ConnectToServer(int file) {
     client.set_items_received_handler([](const std::list<APClient::NetworkItem>& items) {
         auto& inst = instance();
 
-        // Detect server-initiated reset
-        if (!items.empty() && items.front().index == 0 && inst.m_itemIndex > 0) {
-            inst.m_isNeedResetInv = true;
-            inst.m_itemIndex = 0;
-            inst.m_receivedItemsQueue.clear();
-        }
-
         for (const auto& item : items) {
             if (item.index < 0) continue;
-            if (static_cast<size_t>(item.index) < inst.m_itemIndex) continue;
 
             int relativeId = static_cast<int>(item.item - ARCHI_ITEM_OFFSET);
             bool notify = (inst.m_connectionPhase == ConnectionPhase::CONNECTED);
 
-            // Rupee skip on replay
-            if (!notify && ((relativeId >= 0 && relativeId <= 6) || relativeId == 7)) {
-                inst.m_itemIndex = std::max(inst.m_itemIndex, static_cast<size_t>(item.index + 1));
-                continue;
-            }
-
-            if (inst.m_connectionPhase != ConnectionPhase::CONNECTED) {
-                inst.m_receivedItemsQueue.push_back({relativeId, notify});
-            } else {
-                if (!inst.m_isNeedResetInv && item.location != -1 &&
-                    IsLocationChecked(item.location)) {
-                    inst.m_itemIndex = std::max(inst.m_itemIndex, static_cast<size_t>(item.index + 1));
-                    continue;
-                }
-                inst.itemRecvImpl(relativeId, notify);
-            }
-
-            inst.m_itemIndex = std::max(inst.m_itemIndex, static_cast<size_t>(item.index + 1));
+            inst.m_receivedItemsQueue.push_back({
+                static_cast<int>(item.index),
+                relativeId,
+                notify,
+                static_cast<int>(item.player),
+                item.location
+            });
         }
     });
 
@@ -544,16 +543,16 @@ void ArchipelagoContext::ConnectToServer(int file) {
 void ArchipelagoContext::ResetSession() {
     instance().m_client.reset();
     instance().m_seedName.clear();
-    instance().m_itemIndex = 0;
     instance().m_slot = -1;
     instance().m_receivedItemsQueue.clear();
     instance().m_locationItemInfo.clear();
     instance().m_initLocationCollectState.clear();
     instance().m_isEnableDeathLink = false;
-    instance().m_isNeedResetInv = false;
     instance().m_pendingDisconnect = false;
     instance().m_isNeedPlayerDeath = false;
     instance().m_isFromDeathLink = false;
+    instance().m_seedSlotKey = 0;
+    instance().m_SettingsFile.clear();
 }
 
 void ArchipelagoContext::DisconnectFromServer() {
@@ -596,14 +595,6 @@ void ArchipelagoContext::Poll() {
 
         inst.m_hasEverConnected = true;
         inst.m_connectionPhase = ConnectionPhase::CONNECTED;
-
-        // Initial connection: drain items now (Execute() won't run yet)
-        // Reconnection: DON'T drain — let Execute() reset inventory first
-        if (!inst.m_isNeedResetInv) {
-            for (auto& [id, notify] : inst.m_receivedItemsQueue)
-                inst.itemRecvImpl(id, notify);
-            inst.m_receivedItemsQueue.clear();
-        }
     }
 }
 
@@ -611,21 +602,77 @@ ArchipelagoContext::ConnectionPhase ArchipelagoContext::GetConnectionPhase() {
     return instance().m_connectionPhase;
 }
 
+bool ArchipelagoContext::validateSaveCursor() {
+    auto dataNum = dComIfGs_getDataNum();
+    auto& save = g_dComIfG_gameInfo.info.getSavedata();
+    auto& reserve = save.reserve;
+
+    if (!reserve.isApValid()) {
+        if (instance().m_seedSlotKey != 0) {
+            reserve.initAp(instance().m_seedSlotKey, instance().m_seedName.c_str());
+            DuskLog.info("[AP] Initialized AP save block for file {}.", dataNum);
+        }
+        return true;
+    }
+
+    if (reserve.getApSeedSlotKey() != instance().m_seedSlotKey) {
+        DuskLog.error("[AP] Save file seed-slot key mismatch.");
+        return false;
+    }
+
+    return true;
+}
+
+void ArchipelagoContext::resolveReceivedItems() {
+    auto& inst = instance();
+    if (inst.m_receivedItemsQueue.empty()) return;
+
+    if (!randomizer_isSafeForItemGrant()) return;
+
+    auto& save = g_dComIfG_gameInfo.info.getSavedata();
+    auto& reserve = save.reserve;
+    u32 cursor = reserve.getApAppliedCount();
+
+    size_t resolved = 0;
+    for (auto& entry : inst.m_receivedItemsQueue) {
+        if (entry.index < 0) {
+            resolved++;
+            continue;
+        }
+
+        if (static_cast<u32>(entry.index) < cursor) {
+            resolved++;
+            continue;
+        }
+
+        if (!inst.itemRecvImpl(entry.itemId, entry.notify)) {
+            break;
+        }
+
+        u32 newCursor = static_cast<u32>(entry.index + 1);
+        if (newCursor > cursor) {
+            cursor = newCursor;
+            reserve.setApAppliedCount(cursor);
+        }
+        resolved++;
+    }
+
+    if (resolved > 0) {
+        inst.m_receivedItemsQueue.erase(
+            inst.m_receivedItemsQueue.begin(),
+            inst.m_receivedItemsQueue.begin() + static_cast<ptrdiff_t>(resolved));
+    }
+}
+
 void ArchipelagoContext::Execute() {
     if (instance().m_connectionPhase != ConnectionPhase::CONNECTED) return;
 
-    if (instance().m_isNeedResetInv) {
-        HandleResetInventory();
-        instance().m_isNeedResetInv = false;
-        return; // items drain next frame
+    if (!randomizer_isSafeForItemGrant()) {
+        if (instance().tryKillPlayer()) return;
+        return;
     }
 
-    // Drain reconnection items (after inventory was reset last frame)
-    if (!instance().m_receivedItemsQueue.empty()) {
-        for (auto& [id, notify] : instance().m_receivedItemsQueue)
-            instance().itemRecvImpl(id, notify);
-        instance().m_receivedItemsQueue.clear();
-    }
+    instance().resolveReceivedItems();
 
     if (instance().tryKillPlayer()) return;
 
