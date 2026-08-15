@@ -787,9 +787,11 @@ void ArchipelagoContext::UpdateCheckedLocations() {
     }
 
     if (!batch.empty() && instance().m_client) {
-        instance().m_client->LocationChecks(batch);
-    } else if (batch.empty()) {
-        DuskLog.warn("No locations had any changes! this might not be normal.");
+        try {
+            instance().m_client->LocationChecks(batch);
+        } catch (const std::exception& e) {
+            DuskLog.error("[AP] Failed to send LocationChecks: {}", e.what());
+        }
     }
 }
 
@@ -845,13 +847,17 @@ void ArchipelagoContext::TryHandleDeathLink() {
     if (!instance().m_isEnableDeathLink) return;
     if (wasFromDeathLink) return;
 
-    nlohmann::json deathData = {
-        {"time", std::time(nullptr)},
-        {"cause", fmt::format("{} was unable to become the Hero of Twilight.",
-                              instance().m_client->get_slot())},
-        {"source", instance().m_client->get_slot()}
-    };
-    instance().m_client->Bounce(deathData, {}, {}, {"DeathLink"});
+    try {
+        nlohmann::json deathData = {
+            {"time", std::time(nullptr)},
+            {"cause", fmt::format("{} was unable to become the Hero of Twilight.",
+                                  instance().m_client->get_slot())},
+            {"source", instance().m_client->get_slot()}
+        };
+        instance().m_client->Bounce(deathData, {}, {}, {"DeathLink"});
+    } catch (const std::exception& e) {
+        DuskLog.error("[AP] Failed to send DeathLink: {}", e.what());
+    }
 }
 
 bool ArchipelagoContext::TryHandleGameComplete() {
