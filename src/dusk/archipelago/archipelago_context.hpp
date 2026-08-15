@@ -80,6 +80,7 @@ namespace dusk::archi
         std::unique_ptr<randomizer::logic::world::World> m_archiWorld = nullptr;
         bool m_isUpdateLocations = false;
         bool m_isAllowUpdateLocations = false;
+        bool m_needApplyServerState = false;
         bool m_isEnableDeathLink = false;
 
         // AP Data
@@ -147,17 +148,13 @@ namespace dusk::archi
 
         static void Execute();
 
-        static void HandleResetInventory();
-
         static void UpdateCheckedLocations();
 
         static void SetNeedUpdateLocations(bool update);
 
         static void SetLocationChecked(int64_t locId, bool collected);
 
-        static void UpdateLocationState(int64_t locId, bool collected);
-
-        static void UpdateAllLocationState();
+        static void applyServerLocationState();
 
         static bool IsReceivedLocationScouts();
 

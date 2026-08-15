@@ -400,6 +400,8 @@ void ArchipelagoContext::ConnectToServer(int file) {
 
         instance().m_receivedItemsQueue.clear();
         instance().m_syncRequested = false;
+        instance().m_needApplyServerState = true;
+        instance().m_isUpdateLocations = true;
 
         instance().m_seedSlotKey = computeSeedSlotKey(
             instance().m_seedName, instance().m_slotName);
@@ -731,53 +733,15 @@ void ArchipelagoContext::Execute() {
 
     if (instance().tryKillPlayer()) return;
 
+    if (instance().m_needApplyServerState) {
+        applyServerLocationState();
+        instance().m_needApplyServerState = false;
+    }
+
     if (instance().m_isUpdateLocations) {
         UpdateCheckedLocations();
         instance().m_isUpdateLocations = false;
     }
-}
-
-void ArchipelagoContext::HandleResetInventory() {
-    DuskLog.info("Resetting Inventory.");
-    // NOTE: this does not clear ALL things from save, so if a player managed to do something while disconnected from the archi, it might mess with things
-
-    auto& playerInfo = g_dComIfG_gameInfo.info.getPlayer();
-
-    // reset items
-    playerInfo.getItem().init();
-    playerInfo.getGetItem().init();
-
-    // reset collect (poes, shards, swords)
-    playerInfo.getCollect().init();
-
-    playerInfo.getPlayerStatusA().setMaxLife(15);
-    playerInfo.getPlayerStatusA().setWalletSize(WALLET);
-    // dont reset rupees, and instead reject rupee updates while refilling inv
-
-    // add back default items
-
-    execItemGet(dItemNo_WEAR_KOKIRI_e);
-
-    // sync all location collect flags with current collection status obtained from initial room connection
-    UpdateAllLocationState();
-
-    // clear all item-related flags
-
-    dComIfGs_offEventBit(0x2580); // Power up dominion rod
-
-    // shadow crystal
-    dComIfGs_offEventBit(0xD04); // Can transform at will
-    dComIfGs_offEventBit(0x501); // Midna Charge Unlocked
-
-    // hidden skills
-    dComIfGs_offEventBit(0x2904); // ENDING BLOW
-    dComIfGs_offEventBit(0x2908); // SHIELD ATTACK
-    dComIfGs_offEventBit(0x2902); // BACK SLICE
-    dComIfGs_offEventBit(0x2901); // HELM SPLITTER
-    dComIfGs_offEventBit(0x2A80); // MORTAL DRAW
-    dComIfGs_offEventBit(0x2A40); // JUMP STRIKE
-    dComIfGs_offEventBit(0x2A20); // GREAT SPIN
-
 }
 
 void ArchipelagoContext::UpdateCheckedLocations() {
@@ -822,58 +786,36 @@ void ArchipelagoContext::SetNeedUpdateLocations(bool update) {
 }
 
 void ArchipelagoContext::SetLocationChecked(int64_t locId, bool collected) {
-    // func was ran before location scouts could be sent out, cache result until scouts return.
     if (!IsReceivedLocationScouts()) {
         instance().m_initLocationCollectState[locId] = collected;
         return;
     }
 
-    auto& world = instance().m_archiWorld;
+    if (!collected) return;
 
     for (auto& [locName, locInfo] : instance().m_locationItemInfo) {
         if (locInfo.apLocationId == locId) {
-            locInfo.collected = collected;
-
-            // update location flags if possible
-            auto location = world->GetLocation(locInfo.locationName, true);
-            if (!location || !location->IsProgression())
-                return;
-
-            setLocationCollected(location, collected);
+            if (!locInfo.collected) {
+                locInfo.collected = true;
+                instance().m_needApplyServerState = true;
+            }
             return;
         }
     }
-
-    DuskLog.warn("No location found for locId {}.", locId);
 }
 
-void ArchipelagoContext::UpdateLocationState(int64_t locId, bool collected) {
+void ArchipelagoContext::applyServerLocationState() {
     auto& world = instance().m_archiWorld;
+    if (!world) return;
 
     for (const auto& [locName, locInfo] : instance().m_locationItemInfo) {
-        if (locInfo.apLocationId == locId) {
-            auto location = world->GetLocation(locInfo.locationName, true);
-            if (!location || !location->IsProgression())
-                continue;
+        if (!locInfo.collected) continue;
 
-            setLocationCollected(location, collected);
-            return;
-        }
-    }
-
-    DuskLog.warn("No location found for locId {}.", locId);
-}
-
-void ArchipelagoContext::UpdateAllLocationState() {
-    auto& world = instance().m_archiWorld;
-    // TODO: find out why some locations seem to keep their collection state upon reset (bugs)
-
-    for (const auto& [locName, locInfo] : instance().m_locationItemInfo) {
         auto location = world->GetLocation(locInfo.locationName, true);
         if (!location || !location->IsProgression())
             continue;
 
-        setLocationCollected(location, locInfo.collected);
+        setLocationCollected(location, true);
     }
 }
 
