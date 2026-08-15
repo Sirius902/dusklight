@@ -16,6 +16,7 @@
 #include <cstring>
 
 #if TARGET_PC
+#include "dusk/archipelago/archipelago_context.hpp"
 #include "dusk/randomizer/game/flags.h"
 #include "dusk/randomizer/game/tools.h"
 #include "dusk/randomizer/game/stages.h"
@@ -1882,6 +1883,11 @@ int dMsgFlow_c::event000(mesg_flow_node_event* i_flowNode_p, fopAc_ac_c* i_speak
     if (prm1 != 0) {
         dComIfGs_onEventBit(dSv_event_flag_c::saveBitLabels[prm1]);
     }
+
+#if TARGET_PC
+    if ((prm0 != 0 || prm1 != 0) && randomizer_IsActive())
+        dusk::archi::ArchipelagoContext::SetNeedUpdateLocations(true);
+#endif
 
     return 1;
 }

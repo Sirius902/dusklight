@@ -20,6 +20,7 @@
 #include <cstring>
 
 #if TARGET_PC
+#include "dusk/archipelago/archipelago_context.hpp"
 #include "dusk/randomizer/game/verify_item_functions.h"
 #include "dusk/randomizer/game/tools.h"
 #include "dusk/randomizer/game/stages.h"
@@ -1365,6 +1366,10 @@ void dShopSystem_c::setSoldOut() {
             u8 sw = (u8)dShopSystem_itemActor[mSoldOutFlag]->home.angle.z & 0xFF;
             if (sw != 0xFF && !dComIfGs_isSaveSwitch(sw)) {
                 dComIfGs_onSaveSwitch(sw);
+#if TARGET_PC
+                if (randomizer_IsActive())
+                    dusk::archi::ArchipelagoContext::SetNeedUpdateLocations(true);
+#endif
             }
         }
 
