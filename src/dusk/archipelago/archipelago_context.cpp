@@ -253,6 +253,7 @@ bool ArchipelagoContext::tryKillPlayer() {
             dComIfGs_setLife(0);
 
             m_isNeedPlayerDeath = false;
+            m_isFromDeathLink = false;
 
             return true;
         }
