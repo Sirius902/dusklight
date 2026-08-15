@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -65,6 +66,7 @@ namespace dusk::archi
 
         // Per-save cursor
         uint64_t m_seedSlotKey = 0;
+        std::set<int64_t> m_locallyObtainedThisSession;
 
         // Rando Data
         randomizer::seedgen::config::Config m_config;
@@ -143,8 +145,6 @@ namespace dusk::archi
         static void UpdateCheckedLocations();
 
         static void SetNeedUpdateLocations(bool update);
-
-        static bool IsLocationChecked(int64_t locId);
 
         static void SetLocationChecked(int64_t locId, bool collected);
 

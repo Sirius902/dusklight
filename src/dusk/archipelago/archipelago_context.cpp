@@ -553,6 +553,7 @@ void ArchipelagoContext::ResetSession() {
     instance().m_isFromDeathLink = false;
     instance().m_seedSlotKey = 0;
     instance().m_SettingsFile.clear();
+    instance().m_locallyObtainedThisSession.clear();
 }
 
 void ArchipelagoContext::DisconnectFromServer() {
@@ -641,6 +642,17 @@ void ArchipelagoContext::resolveReceivedItems() {
         }
 
         if (static_cast<u32>(entry.index) < cursor) {
+            resolved++;
+            continue;
+        }
+
+        if (entry.notify && entry.location != -1 &&
+            inst.m_locallyObtainedThisSession.contains(entry.location)) {
+            u32 newCursor = static_cast<u32>(entry.index + 1);
+            if (newCursor > cursor) {
+                cursor = newCursor;
+                reserve.setApAppliedCount(cursor);
+            }
             resolved++;
             continue;
         }
@@ -750,6 +762,7 @@ void ArchipelagoContext::UpdateCheckedLocations() {
         if (isCollected && !cachedLocData.collected) {
             cachedLocData.collected = true;
             batch.push_back(cachedLocData.apLocationId);
+            instance().m_locallyObtainedThisSession.insert(cachedLocData.apLocationId);
         }
     }
 
@@ -763,25 +776,6 @@ void ArchipelagoContext::UpdateCheckedLocations() {
 void ArchipelagoContext::SetNeedUpdateLocations(bool update) {
     if (!instance().m_isAllowUpdateLocations)
         instance().m_isUpdateLocations = update;
-}
-
-bool ArchipelagoContext::IsLocationChecked(int64_t locId) {
-    auto& world = instance().m_archiWorld;
-
-    for (const auto& [locName, locInfo] : instance().m_locationItemInfo) {
-        if (locInfo.apLocationId == locId) {
-            if (locInfo.collected)
-                return true;
-
-            if (auto location = world->GetLocation(locInfo.locationName, true)) {
-                return isLocationObtained(location);
-            }
-
-            DuskLog.error("Failed to obtain location: {}", locName);
-            return false;
-        }
-    }
-    return false;
 }
 
 void ArchipelagoContext::SetLocationChecked(int64_t locId, bool collected) {
