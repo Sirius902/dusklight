@@ -1,5 +1,6 @@
 #include <dusk/archipelago/archipelago_context.hpp>
 
+#include <chrono>
 #include <ctime>
 #include <list>
 
@@ -371,6 +372,7 @@ void ArchipelagoContext::ConnectToServer(int file) {
         }
 
         instance().m_connectionPhase = ConnectionPhase::SLOT_CONNECTED;
+        instance().m_connectStartTime = std::chrono::steady_clock::now();
         RequestAllLocationScout();
     });
 
@@ -379,6 +381,7 @@ void ArchipelagoContext::ConnectToServer(int file) {
             DuskLog.error("[AP] Connection refused: {}", err);
         }
         instance().m_connectionPhase = ConnectionPhase::ERROR;
+        instance().m_pendingDisconnect = true;
     });
 
     client.set_socket_error_handler([](const std::string& error) {
@@ -388,13 +391,10 @@ void ArchipelagoContext::ConnectToServer(int file) {
     client.set_socket_disconnected_handler([]() {
         DuskLog.info("[AP] Socket disconnected.");
         auto phase = instance().m_connectionPhase;
-        if (phase == ConnectionPhase::CONNECTED ||
-            phase == ConnectionPhase::GENERATING ||
-            phase == ConnectionPhase::SLOT_CONNECTED) {
+        if (phase == ConnectionPhase::ERROR)
+            return;
+        if (phase != ConnectionPhase::IDLE)
             instance().m_connectionPhase = ConnectionPhase::CONNECTING;
-        } else if (phase != ConnectionPhase::ERROR) {
-            instance().m_connectionPhase = ConnectionPhase::IDLE;
-        }
     });
 
     client.set_items_received_handler([](const std::list<APClient::NetworkItem>& items) {
@@ -537,11 +537,13 @@ void ArchipelagoContext::ConnectToServer(int file) {
     });
 
     instance().m_connectionPhase = ConnectionPhase::CONNECTING;
+    instance().m_connectStartTime = std::chrono::steady_clock::now();
+    instance().m_hasEverConnected = false;
+    instance().m_pendingDisconnect = false;
 }
 
-void ArchipelagoContext::DisconnectFromServer() {
+void ArchipelagoContext::ResetSession() {
     instance().m_client.reset();
-    instance().m_connectionPhase = ConnectionPhase::IDLE;
     instance().m_seedName.clear();
     instance().m_itemIndex = 0;
     instance().m_slot = -1;
@@ -550,6 +552,12 @@ void ArchipelagoContext::DisconnectFromServer() {
     instance().m_initLocationCollectState.clear();
     instance().m_isEnableDeathLink = false;
     instance().m_isNeedResetInv = false;
+    instance().m_pendingDisconnect = false;
+}
+
+void ArchipelagoContext::DisconnectFromServer() {
+    ResetSession();
+    instance().m_connectionPhase = ConnectionPhase::IDLE;
 }
 
 bool ArchipelagoContext::IsConnected() {
@@ -563,10 +571,29 @@ void ArchipelagoContext::Poll() {
 
     inst.m_client->poll();
 
+    if (inst.m_pendingDisconnect) {
+        ResetSession();
+        return;
+    }
+
+    if (!inst.m_hasEverConnected &&
+        (inst.m_connectionPhase == ConnectionPhase::CONNECTING ||
+         inst.m_connectionPhase == ConnectionPhase::SLOT_CONNECTED)) {
+        auto elapsed = std::chrono::steady_clock::now() - inst.m_connectStartTime;
+        if (elapsed > std::chrono::seconds(20)) {
+            DuskLog.error("[AP] Connection timed out.");
+            inst.m_connectionPhase = ConnectionPhase::ERROR;
+            ResetSession();
+            return;
+        }
+    }
+
     if (inst.m_connectionPhase == ConnectionPhase::GENERATING) {
         GenerateLocalWorldData();
 
         if (!inst.m_client) return;
+
+        inst.m_hasEverConnected = true;
         inst.m_connectionPhase = ConnectionPhase::CONNECTED;
 
         // Initial connection: drain items now (Execute() won't run yet)

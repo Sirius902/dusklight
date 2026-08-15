@@ -1046,8 +1046,8 @@ void dFile_select_c::dataSelectStart() {
             randomizer_GetContext() = RandomizerContext();
             mDataSelProc = DATASELPROC_SELECT_DATA_OPEN_MOVE;
 
-            // ensure archipelago is not connected either
-            if (dusk::archi::ArchipelagoContext::IsConnected())
+            if (dusk::archi::ArchipelagoContext::GetConnectionPhase() !=
+                dusk::archi::ArchipelagoContext::ConnectionPhase::IDLE)
                 dusk::archi::ArchipelagoContext::DisconnectFromServer();
 
             selectDataMoveAnmInitSet(SelOpenStartFrameTbl[mSelectNum], SelOpenEndFrameTbl[mSelectNum]);
@@ -1082,8 +1082,8 @@ void dFile_select_c::dataSelectStart() {
                 randomizer_GetContext().LoadFromHash(curFileSeedHash);
             }
 
-            // disconnect from archipelago if applicable
-            if (dusk::archi::ArchipelagoContext::IsConnected())
+            if (dusk::archi::ArchipelagoContext::GetConnectionPhase() !=
+                dusk::archi::ArchipelagoContext::ConnectionPhase::IDLE)
                 dusk::archi::ArchipelagoContext::DisconnectFromServer();
 
             selectDataMoveAnmInitSet(SelOpenStartFrameTbl[mSelectNum], SelOpenEndFrameTbl[mSelectNum]);
@@ -1399,7 +1399,14 @@ void dFile_select_c::selectDataPlayTypeMove() {
     if (mDusk.mStartNameAnm) {
         // Only do so when no documents are visible
         if (!dusk::ui::any_document_visible()) {
-            if (mDusk.mBackToFileSelect) {
+            bool goBack = mDusk.mBackToFileSelect;
+            if (!goBack &&
+                dusk::archi::ArchipelagoContext::GetConnectionPhase() !=
+                    dusk::archi::ArchipelagoContext::ConnectionPhase::CONNECTED) {
+                dusk::archi::ArchipelagoContext::DisconnectFromServer();
+                goBack = true;
+            }
+            if (goBack) {
                 // Code below copied from dFile_select_c::nameInput to initiate going back
                 // to the file selection
                 headerTxtSet(0x43, 1, 0);

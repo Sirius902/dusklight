@@ -14,6 +14,12 @@ ArchiConnectModal::ArchiConnectModal() :
        .title = "Archipelago",
        .bodyRml = "Connecting to Server...",
        .onDismiss = [this](Modal& modal) {
+           auto phase = archi::ArchipelagoContext::GetConnectionPhase();
+           if (phase == archi::ArchipelagoContext::ConnectionPhase::CONNECTING ||
+               phase == archi::ArchipelagoContext::ConnectionPhase::SLOT_CONNECTED ||
+               phase == archi::ArchipelagoContext::ConnectionPhase::GENERATING) {
+               archi::ArchipelagoContext::DisconnectFromServer();
+           }
            mDoAud_seStartMenu(kSoundWindowClose);
            modal.pop(false);
        },
@@ -123,9 +129,7 @@ void CreateSetupConnectionInfoModal() {
             ModalAction{
                 .label = "Cancel",
                 .onPressed = [](Modal& modal) {
-                    // TODO: cancelling this modal will still progress file select to starting the save,
-                    // which could potentially allow a user to break their save file.
-
+                    archi::ArchipelagoContext::DisconnectFromServer();
                     modal.pop(false);
                 },
             },

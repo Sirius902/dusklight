@@ -1,5 +1,6 @@
 #pragma once
 
+#include <chrono>
 #include <string>
 
 #include "apclient.hpp"
@@ -48,6 +49,11 @@ namespace dusk::archi
         int m_slot = -1;
         std::string m_slotName;
         std::string m_password;
+
+        // Connect timeout
+        std::chrono::steady_clock::time_point m_connectStartTime;
+        bool m_hasEverConnected = false;
+        bool m_pendingDisconnect = false;
 
         // Rando Data
         randomizer::seedgen::config::Config m_config;
@@ -105,6 +111,8 @@ namespace dusk::archi
         static void ConnectToServer(int file);
 
         static void DisconnectFromServer();
+
+        static void ResetSession();
 
         static bool IsConnected();
 
