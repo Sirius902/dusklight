@@ -411,6 +411,7 @@ void ArchipelagoContext::ConnectToServer(int file) {
         }
 
         for (const auto& item : items) {
+            if (item.index < 0) continue;
             if (static_cast<size_t>(item.index) < inst.m_itemIndex) continue;
 
             int relativeId = static_cast<int>(item.item - ARCHI_ITEM_OFFSET);
@@ -505,9 +506,14 @@ void ArchipelagoContext::ConnectToServer(int file) {
         if (!isDeathLink) return;
 
         if (bounce.contains("data") && bounce["data"].contains("source")) {
-            auto source = bounce["data"]["source"].get<std::string>();
-            if (source == instance().m_client->get_slot()) return;
-            DuskLog.info("Player {} sent death link.", source);
+            const auto& src = bounce["data"]["source"];
+            if (src.is_string()) {
+                if (src.get<std::string>() == instance().m_client->get_slot()) return;
+                DuskLog.info("Player {} sent death link.", src.get<std::string>());
+            } else if (src.is_number_integer()) {
+                if (src.get<int>() == instance().m_client->get_player_number()) return;
+                DuskLog.info("Player {} sent death link.", src.get<int>());
+            }
         }
 
         RequestPlayerDeath(true);
@@ -562,6 +568,8 @@ void ArchipelagoContext::Poll() {
 
     if (inst.m_connectionPhase == ConnectionPhase::GENERATING) {
         GenerateLocalWorldData();
+
+        if (!inst.m_client) return;
         inst.m_connectionPhase = ConnectionPhase::CONNECTED;
 
         // Initial connection: drain items now (Execute() won't run yet)
@@ -784,6 +792,7 @@ bool ArchipelagoContext::TryHandleGameComplete() {
 }
 
 void ArchipelagoContext::RequestAllLocationScout(bool isHint) {
+    if (!instance().m_client) return;
     std::list<int64_t> locations;
     for (int i = 0; i < 475; i++) {
         locations.push_back(ARCHI_ITEM_OFFSET + i);
