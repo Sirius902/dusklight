@@ -752,6 +752,7 @@ void ArchipelagoContext::Execute() {
 
 void ArchipelagoContext::UpdateCheckedLocations() {
     auto& world = instance().m_archiWorld;
+    if (!world) return;
 
     std::list<int64_t> batch;
 
