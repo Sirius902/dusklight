@@ -384,6 +384,7 @@ void ArchipelagoContext::ConnectToServer(int file) {
         }
 
         instance().m_receivedItemsQueue.clear();
+        instance().m_syncRequested = false;
 
         instance().m_seedSlotKey = computeSeedSlotKey(
             instance().m_seedName, instance().m_slotName);
@@ -554,6 +555,8 @@ void ArchipelagoContext::ResetSession() {
     instance().m_seedSlotKey = 0;
     instance().m_SettingsFile.clear();
     instance().m_locallyObtainedThisSession.clear();
+    instance().m_resolvedIndexHighWater = 0;
+    instance().m_syncRequested = false;
 }
 
 void ArchipelagoContext::DisconnectFromServer() {
@@ -621,6 +624,17 @@ bool ArchipelagoContext::validateSaveCursor() {
         return false;
     }
 
+    u32 cursor = reserve.getApAppliedCount();
+    if (cursor < instance().m_resolvedIndexHighWater && !instance().m_syncRequested) {
+        DuskLog.info("[AP] Save cursor {} < high-water {}, requesting resync.",
+                     cursor, instance().m_resolvedIndexHighWater);
+        if (instance().m_client && instance().m_client->Sync()) {
+            instance().m_syncRequested = true;
+        }
+    } else if (cursor >= instance().m_resolvedIndexHighWater) {
+        instance().m_syncRequested = false;
+    }
+
     return true;
 }
 
@@ -653,6 +667,8 @@ void ArchipelagoContext::resolveReceivedItems() {
                 cursor = newCursor;
                 reserve.setApAppliedCount(cursor);
             }
+            if (newCursor > inst.m_resolvedIndexHighWater)
+                inst.m_resolvedIndexHighWater = newCursor;
             resolved++;
             continue;
         }
@@ -666,6 +682,8 @@ void ArchipelagoContext::resolveReceivedItems() {
             cursor = newCursor;
             reserve.setApAppliedCount(cursor);
         }
+        if (newCursor > inst.m_resolvedIndexHighWater)
+            inst.m_resolvedIndexHighWater = newCursor;
         resolved++;
     }
 

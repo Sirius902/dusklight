@@ -67,6 +67,8 @@ namespace dusk::archi
         // Per-save cursor
         uint64_t m_seedSlotKey = 0;
         std::set<int64_t> m_locallyObtainedThisSession;
+        uint32_t m_resolvedIndexHighWater = 0;
+        bool m_syncRequested = false;
 
         // Rando Data
         randomizer::seedgen::config::Config m_config;
