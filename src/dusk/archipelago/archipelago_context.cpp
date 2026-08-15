@@ -327,8 +327,9 @@ void ArchipelagoContext::ConnectToServer(int file) {
         uri = "ws://" + uri;
     }
 
-    auto uuidPath = (ui::GetRandomizerPath() / "ap_uuid.dat").string();
-    auto uuid = ap_get_uuid(uuidPath, uri);
+    auto randoPath = ui::GetRandomizerPath();
+    std::filesystem::create_directories(randoPath);
+    auto uuid = ap_get_uuid((randoPath / "ap_uuid.dat").string(), uri);
 
     instance().m_dataPackageStore = std::make_unique<DefaultDataPackageStore>();
     instance().m_client = std::make_unique<APClient>(
@@ -344,8 +345,16 @@ void ArchipelagoContext::ConnectToServer(int file) {
 
     client.set_slot_connected_handler([](const nlohmann::json& slotData) {
         instance().m_slot = instance().m_client->get_player_number();
-        instance().m_SettingsFile = slotData.value("Settings", "");
-        instance().m_isEnableDeathLink = slotData.value("death_link", 0) != 0;
+
+        if (slotData.contains("Settings")) {
+            const auto& settings = slotData["Settings"];
+            instance().m_SettingsFile = settings.is_string() ? settings.get<std::string>() : settings.dump();
+        } else {
+            instance().m_SettingsFile = "";
+        }
+
+        instance().m_isEnableDeathLink = slotData.contains("death_link") &&
+            slotData["death_link"].get<int>() != 0;
 
         if (instance().m_isEnableDeathLink) {
             instance().m_client->ConnectUpdate(false, 0, true, {"DeathLink"});
