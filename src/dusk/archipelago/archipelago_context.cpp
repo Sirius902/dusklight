@@ -550,18 +550,20 @@ void ArchipelagoContext::ConnectToServer(int file) {
     client.set_print_json_handler([](const APClient::PrintJSONArgs& args) {
         auto text = instance().m_client->render_json(args.data);
 
-        if (args.type == "ItemSend") {
-            ui::push_toast({
-                .title = "Item Sent",
-                .content = text,
-                .duration = std::chrono::seconds(3),
-            });
-        } else if (args.type == "ItemRecv") {
-            ui::push_toast({
-                .title = "Item Received",
-                .content = text,
-                .duration = std::chrono::seconds(3),
-            });
+        if (args.type == "ItemSend" && args.receiving && args.item) {
+            if (instance().m_client->slot_concerns_self(*args.receiving)) {
+                ui::push_toast({
+                    .title = "Item Received",
+                    .content = text,
+                    .duration = std::chrono::seconds(3),
+                });
+            } else if (instance().m_client->slot_concerns_self(args.item->player)) {
+                ui::push_toast({
+                    .title = "Item Sent",
+                    .content = text,
+                    .duration = std::chrono::seconds(3),
+                });
+            }
         }
 
         DuskLog.info("[AP] {}", text);
