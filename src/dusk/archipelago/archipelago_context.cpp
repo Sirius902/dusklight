@@ -324,9 +324,6 @@ void ArchipelagoContext::ConnectToServer(int file) {
     instance().m_password = GetPassword(file);
 
     auto uri = GetServerIp(file);
-    if (uri.find("://") == std::string::npos) {
-        uri = "ws://" + uri;
-    }
 
     auto randoPath = ui::GetRandomizerPath();
     std::filesystem::create_directories(randoPath);
