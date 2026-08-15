@@ -243,18 +243,14 @@ bool ArchipelagoContext::tryKillPlayer() {
         case daAlink_c::PROC_WOLF_MOVE:
         case daAlink_c::PROC_ATN_MOVE:
         case daAlink_c::PROC_WOLF_ATN_AC_MOVE: {
-            // Check if link is currently in a cutscene
             if (linkActor->checkEventRun())
                 break;
 
-            // Ensure that link is not currently in a message-based event.
             if (linkActor->getEventId() != 0)
                 break;
 
             dComIfGs_setLife(0);
-
             m_isNeedPlayerDeath = false;
-            m_isFromDeathLink = false;
 
             return true;
         }
@@ -553,6 +549,8 @@ void ArchipelagoContext::ResetSession() {
     instance().m_isEnableDeathLink = false;
     instance().m_isNeedResetInv = false;
     instance().m_pendingDisconnect = false;
+    instance().m_isNeedPlayerDeath = false;
+    instance().m_isFromDeathLink = false;
 }
 
 void ArchipelagoContext::DisconnectFromServer() {
@@ -797,16 +795,21 @@ bool ArchipelagoContext::IsReceivedLocationScouts() {
 }
 
 void ArchipelagoContext::TryHandleDeathLink() {
+    bool wasFromDeathLink = instance().m_isFromDeathLink;
+    instance().m_isFromDeathLink = false;
+    instance().m_isNeedPlayerDeath = false;
+
     if (!instance().m_client) return;
-    if (instance().m_isEnableDeathLink && !instance().m_isFromDeathLink) {
-        nlohmann::json deathData = {
-            {"time", std::time(nullptr)},
-            {"cause", fmt::format("{} was unable to become the Hero of Twilight.",
-                                  instance().m_client->get_slot())},
-            {"source", instance().m_client->get_slot()}
-        };
-        instance().m_client->Bounce(deathData, {}, {}, {"DeathLink"});
-    }
+    if (!instance().m_isEnableDeathLink) return;
+    if (wasFromDeathLink) return;
+
+    nlohmann::json deathData = {
+        {"time", std::time(nullptr)},
+        {"cause", fmt::format("{} was unable to become the Hero of Twilight.",
+                              instance().m_client->get_slot())},
+        {"source", instance().m_client->get_slot()}
+    };
+    instance().m_client->Bounce(deathData, {}, {}, {"DeathLink"});
 }
 
 bool ArchipelagoContext::TryHandleGameComplete() {
