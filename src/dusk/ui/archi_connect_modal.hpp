@@ -14,6 +14,7 @@ namespace dusk::ui
             Generating,
             Success,
             Error,
+            InvalidSave,
         };
 
         explicit ArchiConnectModal();

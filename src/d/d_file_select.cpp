@@ -1038,6 +1038,9 @@ void dFile_select_c::dataSelectStart() {
         headerTxtSet(msgTbl[mSelectNum], 1, 0);
         makeRecInfo(mSelectNum);
 
+        dusk::archi::ArchipelagoContext::SetCandidateSaveBlock(
+            mSelectNum, &mSaveData[mSelectNum]);
+
         // Load the randomizer seed if one is tied to this file
         auto curFileSeedHash = dusk::getSettings().randomizer.seedHashes.at(mSelectNum).getValue();
         // If this is a vanilla file, clear rando data structures
@@ -2854,10 +2857,14 @@ void dFile_select_c::CommandExec() {
         dataSave();
         mDataSelProc = DATASELPROC_DATA_COPY_WAIT;
 #if TARGET_PC
-        // Copy over the seed hash as well
-        auto& seedHashes = dusk::getSettings().randomizer.seedHashes;
-        seedHashes[mCpDataToNum].setValue(seedHashes[mCpDataNum]);
-        dusk::config::Save();
+        {
+            auto& seedHashes = dusk::getSettings().randomizer.seedHashes;
+            seedHashes[mCpDataToNum].setValue(seedHashes[mCpDataNum]);
+            auto dstSave = reinterpret_cast<dSv_save_c*>(dstData);
+            dstSave->reserve.init();
+            mDoMemCdRWm_SetCheckSumGameData((u8*)mSaveData, mCpDataToNum);
+            dusk::config::Save();
+        }
 #endif
         break;
     }

@@ -50,6 +50,9 @@ void ArchiConnectModal::update() {
     case archi::ArchipelagoContext::ConnectionPhase::ERROR:
         currentStatus = ConnectionStatus::Error;
         break;
+    case archi::ArchipelagoContext::ConnectionPhase::INVALID_SAVE:
+        currentStatus = ConnectionStatus::InvalidSave;
+        break;
     default:
         return;
     }
@@ -82,6 +85,20 @@ void ArchiConnectModal::update() {
 
                 // show connection setup modal on failure
                 CreateSetupConnectionInfoModal();
+            }
+        });
+        focus();
+        mDisplayedStatus = ConnectionStatus::Ready;
+    } else if (currentStatus == ConnectionStatus::InvalidSave) {
+        mDoAud_seStartMenu(kSoundSeedGenerateError);
+        set_icon("error");
+        set_body("This save is not valid for this Archipelago.");
+        add_action({
+            .label = "OK",
+            .onPressed = [](Modal& modal) {
+                archi::ArchipelagoContext::DisconnectFromServer();
+                mDoAud_seStartMenu(kSoundWindowClose);
+                modal.pop(false);
             }
         });
         focus();

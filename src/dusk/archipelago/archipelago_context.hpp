@@ -1,11 +1,13 @@
 #pragma once
 
 #include <chrono>
+#include <cstring>
 #include <set>
 #include <string>
 #include <vector>
 
 #include "apclient.hpp"
+#include "d/d_save.h"
 
 namespace dusk::archi
 {
@@ -26,6 +28,7 @@ namespace dusk::archi
             GENERATING,
             CONNECTED,
             ERROR,
+            INVALID_SAVE,
         };
 
     private:
@@ -66,6 +69,8 @@ namespace dusk::archi
 
         // Per-save cursor
         uint64_t m_seedSlotKey = 0;
+        dSv_reserve_c m_candidateSaveBlock{};
+        int m_candidateFileNum = -1;
         std::set<int64_t> m_locallyObtainedThisSession;
         uint32_t m_resolvedIndexHighWater = 0;
         bool m_syncRequested = false;
@@ -161,6 +166,10 @@ namespace dusk::archi
         static bool TryHandleGameComplete();
 
         // State Requesters
+
+        static void SetCandidateSaveBlock(int fileNum, const void* saveData);
+
+        static void InitApSaveBlock();
 
         static void RequestAllLocationScout(bool isHint = false);
 

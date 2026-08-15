@@ -27,6 +27,7 @@
 #include <cstring>
 
 #if TARGET_PC
+#include "dusk/archipelago/archipelago_context.hpp"
 #include "dusk/string.hpp"
 #include "dusk/logging.h"
 #include "dusk/randomizer/game/tools.h"
@@ -3029,6 +3030,10 @@ void dComIfGs_setupRandomizerSave() {
     // Set starting inventory
     for (const auto& itemId: randoData.mStartingInventory) {
         execItemGet(itemId);
+    }
+
+    if (dusk::archi::ArchipelagoContext::IsSeedHashArchipelago(randoData.mHash)) {
+        dusk::archi::ArchipelagoContext::InitApSaveBlock();
     }
 
     g_randomizerState = RandomizerState();

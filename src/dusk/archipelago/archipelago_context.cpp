@@ -335,6 +335,21 @@ bool ArchipelagoContext::IsCurrentSeedHash(const std::string& seedStr) {
     return GetArchipelagoSeedName() == seedStr;
 }
 
+void ArchipelagoContext::SetCandidateSaveBlock(int fileNum, const void* saveData) {
+    auto save = static_cast<const dSv_save_c*>(saveData);
+    std::memcpy(&instance().m_candidateSaveBlock, &save->reserve, sizeof(dSv_reserve_c));
+    instance().m_candidateFileNum = fileNum;
+}
+
+void ArchipelagoContext::InitApSaveBlock() {
+    if (!IsConnected()) return;
+    if (instance().m_seedSlotKey == 0) return;
+
+    auto& save = g_dComIfG_gameInfo.info.getSavedata();
+    save.reserve.initAp(instance().m_seedSlotKey, instance().m_seedName.c_str());
+    DuskLog.info("[AP] Initialized AP save block for new file.");
+}
+
 void ArchipelagoContext::ConnectToServer(int file) {
     config::Save();
 
@@ -388,6 +403,14 @@ void ArchipelagoContext::ConnectToServer(int file) {
 
         instance().m_seedSlotKey = computeSeedSlotKey(
             instance().m_seedName, instance().m_slotName);
+
+        auto& candidate = instance().m_candidateSaveBlock;
+        if (candidate.isApValid() &&
+            candidate.getApSeedSlotKey() != instance().m_seedSlotKey) {
+            DuskLog.error("[AP] Save file is bound to a different seed/slot.");
+            instance().m_connectionPhase = ConnectionPhase::INVALID_SAVE;
+            return;
+        }
 
         instance().m_connectionPhase = ConnectionPhase::SLOT_CONNECTED;
         instance().m_connectStartTime = std::chrono::steady_clock::now();
@@ -565,8 +588,10 @@ void ArchipelagoContext::DisconnectFromServer() {
 }
 
 bool ArchipelagoContext::IsConnected() {
-    return instance().m_connectionPhase >= ConnectionPhase::SLOT_CONNECTED &&
-           instance().m_connectionPhase != ConnectionPhase::ERROR;
+    auto phase = instance().m_connectionPhase;
+    return phase >= ConnectionPhase::SLOT_CONNECTED &&
+           phase != ConnectionPhase::ERROR &&
+           phase != ConnectionPhase::INVALID_SAVE;
 }
 
 void ArchipelagoContext::Poll() {
