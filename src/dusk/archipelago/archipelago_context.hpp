@@ -159,6 +159,8 @@ namespace dusk::archi
 
         static bool IsReceivedLocationScouts();
 
+        static bool IsApLocation(const std::string& locName);
+
         static void TryHandleDeathLink();
 
         static bool TryHandleGameComplete();

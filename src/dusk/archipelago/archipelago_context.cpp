@@ -845,6 +845,10 @@ bool ArchipelagoContext::IsReceivedLocationScouts() {
     return !instance().m_locationItemInfo.empty();
 }
 
+bool ArchipelagoContext::IsApLocation(const std::string& locName) {
+    return instance().m_locationItemInfo.contains(locName);
+}
+
 void ArchipelagoContext::TryHandleDeathLink() {
     bool wasFromDeathLink = instance().m_isFromDeathLink;
     instance().m_isFromDeathLink = false;
