@@ -52,9 +52,9 @@ struct SettingsNameConvert {
 
     const std::string& tryGetOptionConvert(const std::string& option) const {
         if (optionsConvert.empty()) {
-            if (option == "Yes")
+            if (option == "Yes" || option == "true")
                 return kDefaultYes;
-            if (option == "No")
+            if (option == "No" || option == "false")
                 return kDefaultNo;
             return option;
         }
@@ -72,6 +72,7 @@ static auto sArchiSettingToDusklight = std::to_array<SettingsNameConvert>({
     {"", ""},
     {"Golden Bugs Shuffled", "Golden Bugs"},
     {"Sky Chracters Shuffled", "Sky Characters"},
+    {"Sky Characters Shuffled", "Sky Characters"},
     {"NPC Items Shuffled", "Gifts From NPCs"},
     {"Shop Items Shuffled", "Shop Items"},
     {"Hidden Skills Shuffled", "Hidden Skills"},
@@ -866,8 +867,8 @@ bool ArchipelagoContext::GenerateConfigFromAP(randomizer::seedgen::config::Confi
     YAML::Node apConfigYaml;
     try {
         apConfigYaml = YAML::Load(settingsStr);
-    }catch (YAML::BadFile& e) {
-        DuskLog.warn("Failed to load AP Config YAML file!");
+    } catch (const YAML::Exception& e) {
+        DuskLog.warn("Failed to parse AP Config: {}", e.what());
         return false;
     }
 
@@ -876,8 +877,14 @@ bool ArchipelagoContext::GenerateConfigFromAP(randomizer::seedgen::config::Confi
 
     // update settings using ap config
     for (const auto& apSettingEntry : apConfigYaml) {
+      try {
         auto apSettingName = apSettingEntry.first.as<std::string>();
-        auto apSettingValue = apSettingEntry.second.as<std::string>();
+        std::string apSettingValue;
+        if (apSettingEntry.second.IsScalar()) {
+            apSettingValue = apSettingEntry.second.as<std::string>();
+        } else {
+            apSettingValue = apSettingEntry.second.as<std::string>("");
+        }
 
         const auto& settingConvert = GetAPSettingNameConvert(apSettingName);
 
@@ -917,9 +924,12 @@ bool ArchipelagoContext::GenerateConfigFromAP(randomizer::seedgen::config::Confi
                 setting.SetCurrentOption("On");
                 setting2.SetCurrentOption("None");
             }
-        }else {
+        } else {
             DuskLog.debug("Missing Setting: {} Value: {}", apSettingName, apSettingValue);
         }
+      } catch (const std::exception& e) {
+        DuskLog.warn("Error applying AP setting: {}", e.what());
+      }
     }
 
     return true;
