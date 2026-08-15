@@ -353,8 +353,12 @@ void ArchipelagoContext::ConnectToServer(int file) {
             instance().m_SettingsFile = "";
         }
 
-        instance().m_isEnableDeathLink = slotData.contains("death_link") &&
-            slotData["death_link"].get<int>() != 0;
+        if (slotData.contains("death_link")) {
+            const auto& dl = slotData["death_link"];
+            instance().m_isEnableDeathLink = dl.is_boolean() ? dl.get<bool>() : dl.get<int>() != 0;
+        } else {
+            instance().m_isEnableDeathLink = false;
+        }
 
         if (instance().m_isEnableDeathLink) {
             instance().m_client->ConnectUpdate(false, 0, true, {"DeathLink"});
@@ -535,10 +539,18 @@ void ArchipelagoContext::DisconnectFromServer() {
     instance().m_client.reset();
     instance().m_connectionPhase = ConnectionPhase::IDLE;
     instance().m_seedName.clear();
+    instance().m_itemIndex = 0;
+    instance().m_slot = -1;
+    instance().m_receivedItemsQueue.clear();
+    instance().m_locationItemInfo.clear();
+    instance().m_initLocationCollectState.clear();
+    instance().m_isEnableDeathLink = false;
+    instance().m_isNeedResetInv = false;
 }
 
 bool ArchipelagoContext::IsConnected() {
-    return instance().m_connectionPhase >= ConnectionPhase::SLOT_CONNECTED;
+    return instance().m_connectionPhase >= ConnectionPhase::SLOT_CONNECTED &&
+           instance().m_connectionPhase != ConnectionPhase::ERROR;
 }
 
 void ArchipelagoContext::Poll() {
@@ -660,9 +672,9 @@ void ArchipelagoContext::UpdateCheckedLocations() {
         }
     }
 
-    if (!batch.empty()) {
+    if (!batch.empty() && instance().m_client) {
         instance().m_client->LocationChecks(batch);
-    } else {
+    } else if (batch.empty()) {
         DuskLog.warn("No locations had any changes! this might not be normal.");
     }
 }
@@ -752,6 +764,7 @@ bool ArchipelagoContext::IsReceivedLocationScouts() {
 }
 
 void ArchipelagoContext::TryHandleDeathLink() {
+    if (!instance().m_client) return;
     if (instance().m_isEnableDeathLink && !instance().m_isFromDeathLink) {
         nlohmann::json deathData = {
             {"time", std::time(nullptr)},
@@ -764,6 +777,7 @@ void ArchipelagoContext::TryHandleDeathLink() {
 }
 
 bool ArchipelagoContext::TryHandleGameComplete() {
+    if (!instance().m_client) return false;
     instance().m_client->StatusUpdate(APClient::ClientStatus::GOAL);
     return true;
 }
