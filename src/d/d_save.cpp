@@ -1888,6 +1888,9 @@ void dSv_save_c::init() {
 
     mEvent.init();
     mMiniGame.init();
+#if TARGET_PC
+    reserve.init();
+#endif
 }
 
 dSv_memory2_c* dSv_save_c::getSave2(int i_stage2No) {

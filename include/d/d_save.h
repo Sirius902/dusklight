@@ -924,9 +924,47 @@ public:
 
 class dSv_reserve_c {
 public:
+#if TARGET_PC
+    static constexpr u32 AP_MAGIC = 0x41505450;
+    static constexpr u16 AP_VERSION = 1;
+
+    void init() { *this = {}; }
+
+    bool isApValid() const {
+        return static_cast<u32>(mApMagic) == AP_MAGIC &&
+               static_cast<u16>(mApVersion) == AP_VERSION;
+    }
+
+    void initAp(u64 key, const char* seedName) {
+        *this = {};
+        mApMagic = AP_MAGIC;
+        mApVersion = AP_VERSION;
+        mApSeedSlotKey = key;
+        if (seedName)
+            std::strncpy(mApSeedName, seedName, sizeof(mApSeedName) - 1);
+    }
+
+    u64 getApSeedSlotKey() const { return mApSeedSlotKey; }
+    u32 getApAppliedCount() const { return mApAppliedCount; }
+    const char* getApSeedName() const { return mApSeedName; }
+
+    void setApAppliedCount(u32 count) { mApAppliedCount = count; }
+
+private:
+    /* 0x00 */ BE<u32> mApMagic{};
+    /* 0x04 */ BE<u16> mApVersion{};
+    /* 0x06 */ BE<u16> mApFlags{};
+    /* 0x08 */ BE<u64> mApSeedSlotKey{};
+    /* 0x10 */ BE<u32> mApAppliedCount{};
+    /* 0x14 */ char mApSeedName[40]{};
+    /* 0x3C */ u8 mApReserved[20]{};
+#else
 private:
     u8 unk[80];
+#endif
 };
+
+static_assert(sizeof(dSv_reserve_c) == 80);
 
 class dSv_save_c {
 public:
@@ -957,6 +995,11 @@ public:
     /* 0x8F0 */ dSv_reserve_c reserve;
     /* 0x940 */ dSv_MiniGame_c mMiniGame;
 };  // Size: 0x958
+
+#if TARGET_PC
+static_assert(offsetof(dSv_save_c, reserve) == 0x8F0);
+static_assert(sizeof(dSv_save_c) == 0x958);
+#endif
 
 class flagFile_c : public JORReflexible {
 public:
