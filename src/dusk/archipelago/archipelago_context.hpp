@@ -1,13 +1,22 @@
 #pragma once
 
-#include <mutex>
 #include <string>
 
-#include "Archipelago.h"
+#include "apclient.hpp"
 
 namespace dusk::archi
 {
     class ArchipelagoContext {
+    public:
+        enum class ConnectionPhase {
+            IDLE,
+            CONNECTING,
+            SLOT_CONNECTED,
+            GENERATING,
+            CONNECTED,
+            ERROR,
+        };
+
     private:
         struct TEMP_GameItemInfo {
             int itemId = -1;
@@ -29,7 +38,16 @@ namespace dusk::archi
         };
 
         std::vector<std::pair<int, bool>> m_receivedItemsQueue;
-        std::mutex m_queueMutex;
+
+        // AP Client
+        std::unique_ptr<APDataPackageStore> m_dataPackageStore;
+        std::unique_ptr<APClient> m_client;
+        ConnectionPhase m_connectionPhase = ConnectionPhase::IDLE;
+        size_t m_itemIndex = 0;
+        std::string m_seedName;
+        int m_slot = -1;
+        std::string m_slotName;
+        std::string m_password;
 
         // Rando Data
         randomizer::seedgen::config::Config m_config;
@@ -41,8 +59,7 @@ namespace dusk::archi
 
         // AP Data
         std::unordered_map<std::string, GameLocationInfo> m_locationItemInfo;
-        std::map<int, bool> m_initLocationCollectState;
-        AP_RoomInfo m_roomInfo;
+        std::map<int64_t, bool> m_initLocationCollectState;
         std::string m_SettingsFile;
         bool m_isNeedPlayerDeath = false;
         bool m_isFromDeathLink = false;
@@ -85,33 +102,31 @@ namespace dusk::archi
 
         // Connection Handlers
 
-        static bool ConnectToServer(int file, bool isBlocking = false);
+        static void ConnectToServer(int file);
 
         static void DisconnectFromServer();
 
         static bool IsConnected();
 
-        // State Handlers
+        static void Poll();
 
-        static void MessageThreadFunc();
+        static ConnectionPhase GetConnectionPhase();
+
+        // State Handlers
 
         static void Execute();
 
-        static void HandleItemReceived(AP_NetworkItem& id, bool notify);
-
         static void HandleResetInventory();
-
-        static void HandleReceiveLocationScout(const std::vector<AP_NetworkItem>& items);
 
         static void UpdateCheckedLocations();
 
         static void SetNeedUpdateLocations(bool update);
 
-        static bool IsLocationChecked(int locId);
+        static bool IsLocationChecked(int64_t locId);
 
-        static void SetLocationChecked(int locId, bool collected);
+        static void SetLocationChecked(int64_t locId, bool collected);
 
-        static void UpdateLocationState(int locId, bool collected);
+        static void UpdateLocationState(int64_t locId, bool collected);
 
         static void UpdateAllLocationState();
 

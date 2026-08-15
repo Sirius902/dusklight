@@ -53,18 +53,72 @@ FetchContent_Declare(
         GIT_TAG        fdbae3f
 )
 
-message(STATUS "randomizer: Fetching APCpp")
+message(STATUS "randomizer: Fetching websocketpp")
 FetchContent_Declare(
-        APCpp
-        GIT_REPOSITORY https://github.com/CraftyBoss/APCpp.git
-        GIT_TAG        2d92f75
+        websocketpp
+        GIT_REPOSITORY https://github.com/zaphoyd/websocketpp.git
+        GIT_TAG        0.8.2
 )
 
-FetchContent_MakeAvailable(yaml-cpp base64pp battery-embed APCpp)
+message(STATUS "randomizer: Fetching asio")
+FetchContent_Declare(
+        asio
+        GIT_REPOSITORY https://github.com/chriskohlhoff/asio.git
+        GIT_TAG        asio-1-30-2
+)
+
+message(STATUS "randomizer: Fetching wswrap")
+FetchContent_Declare(
+        wswrap
+        GIT_REPOSITORY https://github.com/black-sliver/wswrap.git
+        GIT_TAG        aeba7ac428028723fb26ce92488f260660f786b1
+)
+
+message(STATUS "randomizer: Fetching nlohmann_json")
+FetchContent_Declare(
+        nlohmann_json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG        v3.11.3
+)
+
+message(STATUS "randomizer: Fetching apclientpp")
+FetchContent_Declare(
+        apclientpp
+        GIT_REPOSITORY https://github.com/black-sliver/apclientpp.git
+        GIT_TAG        79621690a3e845645f43888b0fe234a99c74892e
+)
+
+FetchContent_MakeAvailable(yaml-cpp base64pp battery-embed)
+
+FetchContent_Populate(websocketpp)
+FetchContent_Populate(asio)
+FetchContent_Populate(wswrap)
+FetchContent_Populate(nlohmann_json)
+FetchContent_Populate(apclientpp)
+
+add_library(websocketpp INTERFACE)
+target_include_directories(websocketpp INTERFACE ${websocketpp_SOURCE_DIR})
+target_compile_definitions(websocketpp INTERFACE _WEBSOCKETPP_CPP11_STL_)
+
+add_library(asio INTERFACE)
+target_include_directories(asio INTERFACE ${asio_SOURCE_DIR}/asio/include)
+target_compile_definitions(asio INTERFACE ASIO_STANDALONE)
+
+add_library(wswrap INTERFACE)
+target_include_directories(wswrap INTERFACE ${wswrap_SOURCE_DIR}/include)
+
+add_library(apclientpp INTERFACE)
+target_include_directories(apclientpp INTERFACE
+        ${apclientpp_SOURCE_DIR}
+        ${nlohmann_json_SOURCE_DIR}/include)
+target_compile_definitions(apclientpp INTERFACE AP_NO_SCHEMA)
+target_link_libraries(apclientpp INTERFACE websocketpp asio wswrap)
+
+find_package(OpenSSL REQUIRED)
 
 string(LENGTH "${CMAKE_SOURCE_DIR}/" SOURCE_PATH_SIZE)
 set(GAME_COMPILE_DEFS ${GAME_COMPILE_DEFS} SOURCE_PATH_SIZE=${SOURCE_PATH_SIZE})
-set(GAME_LIBS ${GAME_LIBS} yaml-cpp::yaml-cpp base64pp APCpp)
+set(GAME_LIBS ${GAME_LIBS} yaml-cpp::yaml-cpp base64pp apclientpp OpenSSL::SSL OpenSSL::Crypto)
 
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/randomizer")
 # Put data files together for easier manipulation

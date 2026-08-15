@@ -1,14 +1,11 @@
 #include <dusk/ui/archi_connect_modal.hpp>
 #include <dusk/ui/string_button.hpp>
 
-#include <thread>
 #include "dusk/archipelago/archipelago_context.hpp"
 #include "m_Do/m_Do_audio.h"
 
 namespace dusk::ui {
 
-
-static std::atomic connectStatus = ArchiConnectModal::ConnectionStatus::None;
 
 void CreateSetupConnectionInfoModal();
 
@@ -28,78 +25,72 @@ ArchiConnectModal::ArchiConnectModal() :
 void ArchiConnectModal::update() {
     Modal::update();
 
-    auto currentStatus = connectStatus.load();
+    if (mDisplayedStatus == ConnectionStatus::Ready) return;
 
-    if (currentStatus != mDisplayedStatus) {
-        mDisplayedStatus = currentStatus;
+    auto phase = archi::ArchipelagoContext::GetConnectionPhase();
+    ConnectionStatus currentStatus;
 
-        if (currentStatus == ConnectionStatus::Success ||
-        currentStatus == ConnectionStatus::Error)
-        {
-            if (currentStatus == ConnectionStatus::Success) {
-                mDoAud_seStartMenu(kSoundSeedGenerateSuccess);
-                set_icon("celebration");
-                set_body("Sucessfully Connected to server!");
-            } else {
-                mDoAud_seStartMenu(kSoundSeedGenerateError);
-                set_icon("error");
-                set_body("Failed to Connect to server.");
-            }
-            add_action({
-                .label = "OK",
-                .onPressed = [currentStatus](Modal& modal) {
-                    mDoAud_seStartMenu(kSoundWindowClose);
-                    modal.pop(false);
-
-                    // show connection setup modal on failure
-                    if (currentStatus == ConnectionStatus::Error) {
-                        CreateSetupConnectionInfoModal();
-                    }
-                }
-            });
-
-            // Refocus so that we focus the new button
-            focus();
-
-            mDisplayedStatus = ConnectionStatus::Ready;
-        }else if (currentStatus == ConnectionStatus::Generating) {
-            set_body("Loading seed data into game...");
-        }else if (currentStatus == ConnectionStatus::Disconnecting) {
-            set_body("Disconnecting from previous server...");
-        }
-
-        connectStatus.store(mDisplayedStatus);
-    }
-}
-
-void HandleArchipelagoConnect() {
-    // if a connection was already established, disconnect before attempting a new connection.
-    if (archi::ArchipelagoContext::IsConnected()) {
-        connectStatus.store(ArchiConnectModal::ConnectionStatus::Disconnecting);
-        archi::ArchipelagoContext::DisconnectFromServer();
-    }
-
-    if (!archi::ArchipelagoContext::ConnectToServer(dComIfGs_getDataNum(), true)) {
-        archi::ArchipelagoContext::DisconnectFromServer();
-        connectStatus.store(ArchiConnectModal::ConnectionStatus::Error);
+    switch (phase) {
+    case archi::ArchipelagoContext::ConnectionPhase::CONNECTING:
+    case archi::ArchipelagoContext::ConnectionPhase::SLOT_CONNECTED:
+        currentStatus = ConnectionStatus::Connecting;
+        break;
+    case archi::ArchipelagoContext::ConnectionPhase::GENERATING:
+        currentStatus = ConnectionStatus::Generating;
+        break;
+    case archi::ArchipelagoContext::ConnectionPhase::CONNECTED:
+        currentStatus = ConnectionStatus::Success;
+        break;
+    case archi::ArchipelagoContext::ConnectionPhase::ERROR:
+        currentStatus = ConnectionStatus::Error;
+        break;
+    default:
         return;
     }
 
-    connectStatus.store(ArchiConnectModal::ConnectionStatus::Generating);
+    if (currentStatus == mDisplayedStatus) return;
+    mDisplayedStatus = currentStatus;
 
-    while (!archi::ArchipelagoContext::IsReceivedLocationScouts()) {
-        std::this_thread::yield();
+    if (currentStatus == ConnectionStatus::Success) {
+        mDoAud_seStartMenu(kSoundSeedGenerateSuccess);
+        set_icon("celebration");
+        set_body("Successfully Connected to server!");
+        add_action({
+            .label = "OK",
+            .onPressed = [](Modal& modal) {
+                mDoAud_seStartMenu(kSoundWindowClose);
+                modal.pop(false);
+            }
+        });
+        focus();
+        mDisplayedStatus = ConnectionStatus::Ready;
+    } else if (currentStatus == ConnectionStatus::Error) {
+        mDoAud_seStartMenu(kSoundSeedGenerateError);
+        set_icon("error");
+        set_body("Failed to Connect to server.");
+        add_action({
+            .label = "OK",
+            .onPressed = [](Modal& modal) {
+                mDoAud_seStartMenu(kSoundWindowClose);
+                modal.pop(false);
+
+                // show connection setup modal on failure
+                CreateSetupConnectionInfoModal();
+            }
+        });
+        focus();
+        mDisplayedStatus = ConnectionStatus::Ready;
+    } else if (currentStatus == ConnectionStatus::Generating) {
+        set_body("Loading seed data into game...");
     }
-
-    archi::ArchipelagoContext::GenerateLocalWorldData();
-
-    connectStatus.store(ArchiConnectModal::ConnectionStatus::Success);
 }
 
 void ConnectAndLoadArchipelago() {
-    connectStatus.store(ArchiConnectModal::ConnectionStatus::Connecting);
-    std::thread archiConnectThread(HandleArchipelagoConnect);
-    archiConnectThread.detach();
+    if (archi::ArchipelagoContext::GetConnectionPhase() !=
+        archi::ArchipelagoContext::ConnectionPhase::IDLE) {
+        archi::ArchipelagoContext::DisconnectFromServer();
+    }
+    archi::ArchipelagoContext::ConnectToServer(dComIfGs_getDataNum());
 
     push_document(std::make_unique<ArchiConnectModal>());
 

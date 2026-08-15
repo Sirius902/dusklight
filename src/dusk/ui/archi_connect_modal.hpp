@@ -10,7 +10,6 @@ namespace dusk::ui
         enum class ConnectionStatus {
             None,
             Ready,
-            Disconnecting,
             Connecting,
             Generating,
             Success,

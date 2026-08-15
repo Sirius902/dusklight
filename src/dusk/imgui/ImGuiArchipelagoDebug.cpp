@@ -2,7 +2,6 @@
 
 #include "imgui.h"
 
-#include "Archipelago.h"
 #include "aurora/lib/window.hpp"
 #include "dusk/file_select.hpp"
 #include "dusk/archipelago/archipelago_context.hpp"
@@ -31,7 +30,7 @@ void ImGuiArchipelagoDebug::drawWindow() {
 
     ImGui::Begin("Archipelago Debug", &m_drawWindow);
 
-    if (archi::ArchipelagoContext::IsConnected()) {
+    if (archi::ArchipelagoContext::GetConnectionPhase() != archi::ArchipelagoContext::ConnectionPhase::IDLE) {
         if (ImGui::Button("Test Create World Data")) {
             archi::ArchipelagoContext::GenerateLocalWorldData();
         }

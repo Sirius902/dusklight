@@ -69,6 +69,7 @@
 #include "dusk/ui/touch_controls.hpp"
 #include "dusk/ui/ui.hpp"
 #include "dusk/ui/rando_config.hpp"
+#include "dusk/archipelago/archipelago_context.hpp"
 #include "version.h"
 
 #include <aurora/aurora.h>
@@ -296,6 +297,7 @@ void main01(void) {
         dusk::lastFrameAuroraStats = *aurora_get_stats();
         mDoGph_gInf_c::updateRenderSize();
 
+        dusk::archi::ArchipelagoContext::Poll();
         dusk::ui::update();
 
         const auto pacing = dusk::game_clock::advance_main_loop();

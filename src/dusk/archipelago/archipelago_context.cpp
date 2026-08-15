@@ -1,8 +1,10 @@
 #include <dusk/archipelago/archipelago_context.hpp>
 
-#include <thread>
+#include <ctime>
+#include <list>
 
-#include "Archipelago.h"
+#include "apuuid.hpp"
+#include "defaultdatapackagestore.hpp"
 #include "d/d_item.h"
 #include "d/actor/d_a_alink.h"
 #include "dusk/config.hpp"
@@ -114,61 +116,6 @@ const SettingsNameConvert& GetAPSettingNameConvert(const std::string& apSettingN
             return entry;
     }
     return sArchiSettingToDusklight[0];
-}
-
-const char* getMessageTypeName(AP_MessageType type) {
-    switch (type) {
-    case AP_MessageType::Plaintext:
-        return "Plaintext";
-    case AP_MessageType::ItemSend:
-        return "ItemSend";
-    case AP_MessageType::ItemRecv:
-        return "ItemRecv";
-    case AP_MessageType::Hint:
-        return "Hint";
-    case AP_MessageType::Countdown:
-        return "Countdown";
-    default:
-        return nullptr;
-    }
-}
-
-void ParseMessageData() {
-    auto msg = AP_GetLatestMessage();
-
-    switch (msg->type) {
-    case AP_MessageType::ItemSend: {
-        auto sendMsg = (AP_ItemSendMessage*)msg;
-        ui::push_toast({
-            .title = "Item Sent",
-            .content = fmt::format("Sent {} to {}", sendMsg->item, sendMsg->recvPlayer),
-            .duration = std::chrono::seconds(3),
-        });
-
-        DuskLog.info("[{}] {}", getMessageTypeName(msg->type), msg->text);
-        break;
-    }
-    case AP_MessageType::ItemRecv: {
-        auto recvMsg = (AP_ItemRecvMessage*)msg;
-
-        ui::push_toast({
-            .title = "Item Received",
-            .content = fmt::format("Got {} From {}", recvMsg->item, recvMsg->sendPlayer),
-            .duration = std::chrono::seconds(3),
-        });
-        // fallthrough for debug logging text contents
-    }
-    case AP_MessageType::Plaintext:
-    case AP_MessageType::Hint:
-    case AP_MessageType::Countdown:
-        DuskLog.info("[{}] {}", getMessageTypeName(msg->type), msg->text);
-        break;
-    default:
-        DuskLog.warn("Unknown message type! Type: {}", fmt::underlying(msg->type));
-        break;
-    }
-
-    AP_ClearLatestMessage();
 }
 
 void ArchipelagoContext::LoadTempItemInfo() {
@@ -344,19 +291,16 @@ const std::string& ArchipelagoContext::GetPassword(int file) {
 
 std::string ArchipelagoContext::GetArchipelagoSeedName() {
     if (IsConnected()) {
-        auto& roomInfo = instance().m_roomInfo;
-        if (roomInfo.seed_name.empty()) {
+        if (instance().m_seedName.empty()) {
             DuskLog.warn("Got an invalid Seed Name!");
         }
-        return fmt::format("AP_{}", roomInfo.seed_name);
-    }else {
-        DuskLog.fatal("Archipelago was not connected when attempting to get seed name!");
+        return fmt::format("AP_{}", instance().m_seedName);
     }
+    return "";
 }
 
 void ArchipelagoContext::GetSeedDirectoryPath(std::filesystem::path& outPath) {
     if (IsConnected()) {
-        auto& roomInfo = instance().m_roomInfo;
         outPath = ui::GetRandomizerPath() / "archipelago" / GetArchipelagoSeedName();
     }
 }
@@ -369,160 +313,271 @@ bool ArchipelagoContext::IsCurrentSeedHash(const std::string& seedStr) {
     return GetArchipelagoSeedName() == seedStr;
 }
 
-bool ArchipelagoContext::ConnectToServer(int file, bool isBlocking) {
+void ArchipelagoContext::ConnectToServer(int file) {
     config::Save();
 
     instance().LoadTempItemInfo();
-
     instance().LoadTempLocationInfo();
 
-    AP_SetLogCallback([](const std::string& msg) {
-       DuskLog.info("{}", msg);
+    instance().m_slotName = GetSlotName(file);
+    instance().m_password = GetPassword(file);
+
+    auto uri = GetServerIp(file);
+    if (uri.find("://") == std::string::npos) {
+        uri = "ws://" + uri;
+    }
+
+    auto uuidPath = (ui::GetRandomizerPath() / "ap_uuid.dat").string();
+    auto uuid = ap_get_uuid(uuidPath, uri);
+
+    instance().m_dataPackageStore = std::make_unique<DefaultDataPackageStore>();
+    instance().m_client = std::make_unique<APClient>(
+        uuid, "Twilight Princess", uri, "", instance().m_dataPackageStore.get());
+
+    auto& client = *instance().m_client;
+
+    client.set_room_info_handler([]() {
+        instance().m_seedName = instance().m_client->get_seed();
+        instance().m_client->ConnectSlot(
+            instance().m_slotName, instance().m_password, 0b111, {});
     });
 
-    AP_Init(GetServerIp(file).c_str(), "Twilight Princess", GetSlotName(file).c_str(), GetPassword(file).c_str());
+    client.set_slot_connected_handler([](const nlohmann::json& slotData) {
+        instance().m_slot = instance().m_client->get_player_number();
+        instance().m_SettingsFile = slotData.value("Settings", "");
+        instance().m_isEnableDeathLink = slotData.value("death_link", 0) != 0;
 
-    AP_NetworkVersion ver{0, 6,7};
-    AP_SetClientVersion(&ver);
+        if (instance().m_isEnableDeathLink) {
+            instance().m_client->ConnectUpdate(false, 0, true, {"DeathLink"});
+        }
 
-    AP_SetDeathLinkSupported(true);
+        // Reconnection detection
+        if (instance().m_archiWorld != nullptr) {
+            instance().m_isNeedResetInv = true;
+            instance().m_itemIndex = 0;
+            instance().m_receivedItemsQueue.clear();
+            instance().m_locationItemInfo.clear();
+        }
 
-    AP_SetDeathLinkRecvCallback([](std::string source, std::string cause) {
-        DuskLog.info("Player {} sent death link. Cause: {}", source, cause);
+        instance().m_connectionPhase = ConnectionPhase::SLOT_CONNECTED;
+        RequestAllLocationScout();
+    });
+
+    client.set_slot_refused_handler([](const std::list<std::string>& errors) {
+        for (const auto& err : errors) {
+            DuskLog.error("[AP] Connection refused: {}", err);
+        }
+        instance().m_connectionPhase = ConnectionPhase::ERROR;
+    });
+
+    client.set_socket_error_handler([](const std::string& error) {
+        DuskLog.error("[AP] Socket error: {}", error);
+    });
+
+    client.set_socket_disconnected_handler([]() {
+        DuskLog.info("[AP] Socket disconnected.");
+        auto phase = instance().m_connectionPhase;
+        if (phase == ConnectionPhase::CONNECTED ||
+            phase == ConnectionPhase::GENERATING ||
+            phase == ConnectionPhase::SLOT_CONNECTED) {
+            instance().m_connectionPhase = ConnectionPhase::CONNECTING;
+        } else if (phase != ConnectionPhase::ERROR) {
+            instance().m_connectionPhase = ConnectionPhase::IDLE;
+        }
+    });
+
+    client.set_items_received_handler([](const std::list<APClient::NetworkItem>& items) {
+        auto& inst = instance();
+
+        // Detect server-initiated reset
+        if (!items.empty() && items.front().index == 0 && inst.m_itemIndex > 0) {
+            inst.m_isNeedResetInv = true;
+            inst.m_itemIndex = 0;
+            inst.m_receivedItemsQueue.clear();
+        }
+
+        for (const auto& item : items) {
+            if (static_cast<size_t>(item.index) < inst.m_itemIndex) continue;
+
+            int relativeId = static_cast<int>(item.item - ARCHI_ITEM_OFFSET);
+            bool notify = (inst.m_connectionPhase == ConnectionPhase::CONNECTED);
+
+            // Rupee skip on replay
+            if (!notify && ((relativeId >= 0 && relativeId <= 6) || relativeId == 7)) {
+                inst.m_itemIndex = std::max(inst.m_itemIndex, static_cast<size_t>(item.index + 1));
+                continue;
+            }
+
+            if (inst.m_connectionPhase != ConnectionPhase::CONNECTED) {
+                inst.m_receivedItemsQueue.push_back({relativeId, notify});
+            } else {
+                if (!inst.m_isNeedResetInv && item.location != -1 &&
+                    IsLocationChecked(item.location)) {
+                    inst.m_itemIndex = std::max(inst.m_itemIndex, static_cast<size_t>(item.index + 1));
+                    continue;
+                }
+                inst.itemRecvImpl(relativeId, notify);
+            }
+
+            inst.m_itemIndex = std::max(inst.m_itemIndex, static_cast<size_t>(item.index + 1));
+        }
+    });
+
+    client.set_location_info_handler([](const std::list<APClient::NetworkItem>& items) {
+        DuskLog.info("Got {} Location Scouts from Server.", items.size());
+
+        for (const auto& item : items) {
+            int parsedItemId;
+            std::string parsedItemName;
+            if (item.player == instance().m_slot) {
+                int adjustedId = static_cast<int>(item.item - ARCHI_ITEM_OFFSET);
+
+                if (instance().m_apItemToGameItem.contains(adjustedId)) {
+                    auto& itemInfo = instance().m_apItemToGameItem[adjustedId];
+                    parsedItemId = itemInfo.itemId;
+                    parsedItemName = itemInfo.itemName;
+                } else {
+                    parsedItemId = -1;
+                    parsedItemName = "Unknown";
+                }
+            } else {
+                parsedItemId = dItemNo_Randomizer_ARCHIPELAGO_ITEM_e;
+                parsedItemName = "Archipelago Item";
+            }
+            int locationId = static_cast<int>(item.location - ARCHI_ITEM_OFFSET);
+
+            auto locName = instance().getLocationNameFromApId(locationId);
+
+            if (locName.empty()) {
+                DuskLog.info("No location with ID {} found.", locationId);
+                continue;
+            }
+
+            bool collected = false;
+            if (instance().m_initLocationCollectState.contains(item.location))
+                collected = instance().m_initLocationCollectState[item.location];
+
+            instance().m_locationItemInfo[locName] = {
+                parsedItemId,
+                parsedItemName,
+                locName,
+                item.location,
+                collected
+            };
+        }
+
+        if (instance().m_connectionPhase == ConnectionPhase::SLOT_CONNECTED) {
+            instance().m_connectionPhase = ConnectionPhase::GENERATING;
+        }
+    });
+
+    client.set_location_checked_handler([](const std::list<int64_t>& locations) {
+        for (auto locId : locations) {
+            DuskLog.info("Location Checked Callback Called! Location: {}", locId);
+            SetLocationChecked(locId, true);
+        }
+    });
+
+    client.set_bounced_handler([](const nlohmann::json& bounce) {
+        if (!bounce.contains("tags") || !bounce["tags"].is_array()) return;
+
+        bool isDeathLink = false;
+        for (const auto& tag : bounce["tags"]) {
+            if (tag == "DeathLink") {
+                isDeathLink = true;
+                break;
+            }
+        }
+        if (!isDeathLink) return;
+
+        if (bounce.contains("data") && bounce["data"].contains("source")) {
+            auto source = bounce["data"]["source"].get<std::string>();
+            if (source == instance().m_client->get_slot()) return;
+            DuskLog.info("Player {} sent death link.", source);
+        }
+
         RequestPlayerDeath(true);
     });
 
-    AP_SetItemClearCallback([]() {
-        DuskLog.info("Item Clear Callback Called!");
-        instance().m_isNeedResetInv = true;
-    });
+    client.set_print_json_handler([](const APClient::PrintJSONArgs& args) {
+        auto text = instance().m_client->render_json(args.data);
 
-    AP_SetItemRecvCallback([](AP_NetworkItem& item, bool notify) {
-        DuskLog.debug("Item Receive Callback Called! Item: {} Notify: {}", item.item, notify);
-        HandleItemReceived(item, notify);
-    });
-
-    AP_SetLocationCheckedCallback([](int loc) {
-        DuskLog.info("Location Checked Callback Called! Location: {}", loc);
-        SetLocationChecked(loc, true);
-    });
-
-    AP_SetLocationInfoCallback([](std::vector<AP_NetworkItem> items) {
-        DuskLog.info("Got {} Location Scouts from Server.", items.size());
-        HandleReceiveLocationScout(items);
-    });
-
-    AP_RegisterSlotDataRawCallback("Settings", [](std::string data) {
-        DuskLog.info("Got Settings from Slot Data.");
-        instance().m_SettingsFile = data;
-    });
-
-    AP_RegisterSlotDataRawCallback("World Version", [](std::string data) {
-        DuskLog.info("TP APWorld Version: {}", data);
-    });
-
-    AP_Start();
-
-    // above func spawns a websocket thread, but there isn't really a good way to ensure a connection
-    // attempt has been made except to wait for that thread to tick once
-
-    if (isBlocking) {
-        // wait for ws thread to run a frame before checking for status
-        std::this_thread::sleep_for(std::chrono::seconds(1));
-
-        while (AP_GetConnectionStatus() == AP_ConnectionStatus::Connecting)
-            std::this_thread::yield();
-
-        if (!IsConnected()) {
-            DuskLog.error("Failed to connect to Archipelago Server!");
-            return false;
+        if (args.type == "ItemSend") {
+            ui::push_toast({
+                .title = "Item Sent",
+                .content = text,
+                .duration = std::chrono::seconds(3),
+            });
+        } else if (args.type == "ItemRecv") {
+            ui::push_toast({
+                .title = "Item Received",
+                .content = text,
+                .duration = std::chrono::seconds(3),
+            });
         }
-    }
 
-    std::thread messageThread = std::thread(MessageThreadFunc);
-    messageThread.detach();
+        DuskLog.info("[AP] {}", text);
+    });
 
-    return true;
+    instance().m_connectionPhase = ConnectionPhase::CONNECTING;
 }
 
 void ArchipelagoContext::DisconnectFromServer() {
-    AP_Shutdown();
+    instance().m_client.reset();
+    instance().m_connectionPhase = ConnectionPhase::IDLE;
+    instance().m_seedName.clear();
 }
 
 bool ArchipelagoContext::IsConnected() {
-    auto status = AP_GetConnectionStatus();
-    return status == AP_ConnectionStatus::Connected || status == AP_ConnectionStatus::Authenticated;
+    return instance().m_connectionPhase >= ConnectionPhase::SLOT_CONNECTED;
 }
 
-void ArchipelagoContext::MessageThreadFunc() {
-    DuskLog.info("AP Thread started.");
+void ArchipelagoContext::Poll() {
+    auto& inst = instance();
+    if (!inst.m_client) return;
 
-    if (IsConnected()) {
-        AP_GetRoomInfo(&instance().m_roomInfo);
-        instance().m_isEnableDeathLink = AP_IsDeathLinkEnabled();
-        RequestAllLocationScout();
+    inst.m_client->poll();
+
+    if (inst.m_connectionPhase == ConnectionPhase::GENERATING) {
+        GenerateLocalWorldData();
+        inst.m_connectionPhase = ConnectionPhase::CONNECTED;
+
+        // Initial connection: drain items now (Execute() won't run yet)
+        // Reconnection: DON'T drain — let Execute() reset inventory first
+        if (!inst.m_isNeedResetInv) {
+            for (auto& [id, notify] : inst.m_receivedItemsQueue)
+                inst.itemRecvImpl(id, notify);
+            inst.m_receivedItemsQueue.clear();
+        }
     }
+}
 
-    while (IsConnected()) {
-        if (AP_IsMessagePending())
-            ParseMessageData();
-    }
-
-    DuskLog.info("AP Thread ended.");
+ArchipelagoContext::ConnectionPhase ArchipelagoContext::GetConnectionPhase() {
+    return instance().m_connectionPhase;
 }
 
 void ArchipelagoContext::Execute() {
-    if (!IsConnected())
-        return;
+    if (instance().m_connectionPhase != ConnectionPhase::CONNECTED) return;
 
-    // reset player inventory if server requested it
     if (instance().m_isNeedResetInv) {
         HandleResetInventory();
         instance().m_isNeedResetInv = false;
-        return; // end execution early so next frame can re-add inventory if needed
+        return; // items drain next frame
     }
 
-    // process death links
-    if (instance().tryKillPlayer()) {
-        // if successful, don't bother processing item queue or location checks
-        return;
-    }
-
-    // drain pending item queue here
-    instance().m_queueMutex.lock();
+    // Drain reconnection items (after inventory was reset last frame)
     if (!instance().m_receivedItemsQueue.empty()) {
-        for (auto item : instance().m_receivedItemsQueue) {
-            instance().itemRecvImpl(item.first, item.second);
-        }
-
+        for (auto& [id, notify] : instance().m_receivedItemsQueue)
+            instance().itemRecvImpl(id, notify);
         instance().m_receivedItemsQueue.clear();
     }
-    instance().m_queueMutex.unlock();
 
-    // update location checks here if we need to
+    if (instance().tryKillPlayer()) return;
+
     if (instance().m_isUpdateLocations) {
         UpdateCheckedLocations();
         instance().m_isUpdateLocations = false;
     }
-}
-
-void ArchipelagoContext::HandleItemReceived(AP_NetworkItem& netItem, bool notify) {
-    int relativeId = netItem.item - ARCHI_ITEM_OFFSET;
-
-    // TODO: modify this to also include junk items like ammo
-    if (!notify && ((relativeId >= 0 && relativeId <= 6) || relativeId == 7)) {
-        // skip rupee refills so players cant abuse disconnect/reconnect
-        return;
-    }
-
-    if (!instance().m_isNeedResetInv && netItem.location != -1 && IsLocationChecked(netItem.location)) {
-        // no need to handle item if its location has already been checked
-        return;
-    }
-
-    instance().m_queueMutex.lock();
-    instance().m_receivedItemsQueue.push_back({relativeId, notify});
-    instance().m_queueMutex.unlock();
 }
 
 void ArchipelagoContext::HandleResetInventory() {
@@ -568,53 +623,10 @@ void ArchipelagoContext::HandleResetInventory() {
 
 }
 
-void ArchipelagoContext::HandleReceiveLocationScout(const std::vector<AP_NetworkItem>& items) {
-    for (const auto& item : items) {
-        int parsedItemId;
-        std::string parsedItemName;
-        if (item.player == AP_GetPlayerID()) {
-            int adjustedId = item.item - ARCHI_ITEM_OFFSET;
-
-            if (instance().m_apItemToGameItem.contains(adjustedId)) {
-                auto& itemInfo = instance().m_apItemToGameItem[adjustedId];
-                parsedItemId = itemInfo.itemId;
-                parsedItemName = itemInfo.itemName;
-            }else {
-                parsedItemId = -1;
-                parsedItemName = "Unknown";
-            }
-        }else {
-            parsedItemId = dItemNo_Randomizer_ARCHIPELAGO_ITEM_e;
-            parsedItemName = "Archipelago Item";
-        }
-        int locationId = item.location - ARCHI_ITEM_OFFSET;
-
-        auto locName = instance().getLocationNameFromApId(locationId);
-
-        if (locName.empty()) {
-            DuskLog.info("No location with ID {} found.", locationId);
-            continue;
-        }
-
-        bool collected = false;
-        if (instance().m_initLocationCollectState.contains(item.location))
-            collected = instance().m_initLocationCollectState[item.location];
-
-        instance().m_locationItemInfo[locName] = {
-            parsedItemId,
-            parsedItemName,
-            locName,
-            item.location,
-            collected
-        };
-    }
-}
-// TODO: atm this is a sort of lazy solution to not having direct access to what location was checked when an execItemGet is called
-// so eventually finding a way to properly associate locations with their respective item get funcs would benefit this system
 void ArchipelagoContext::UpdateCheckedLocations() {
     auto& world = instance().m_archiWorld;
 
-    bool changed = false;
+    std::list<int64_t> batch;
 
     for (auto location : world->GetAllLocations()) {
         // skip locations that aren't progression, which are locations that just aren't randomized
@@ -635,12 +647,13 @@ void ArchipelagoContext::UpdateCheckedLocations() {
 
         if (isCollected && !cachedLocData.collected) {
             cachedLocData.collected = true;
-            AP_SendItem(cachedLocData.apLocationId);
-            changed = true;
+            batch.push_back(cachedLocData.apLocationId);
         }
     }
 
-    if (!changed) {
+    if (!batch.empty()) {
+        instance().m_client->LocationChecks(batch);
+    } else {
         DuskLog.warn("No locations had any changes! this might not be normal.");
     }
 }
@@ -650,7 +663,7 @@ void ArchipelagoContext::SetNeedUpdateLocations(bool update) {
         instance().m_isUpdateLocations = update;
 }
 
-bool ArchipelagoContext::IsLocationChecked(int locId) {
+bool ArchipelagoContext::IsLocationChecked(int64_t locId) {
     auto& world = instance().m_archiWorld;
 
     for (const auto& [locName, locInfo] : instance().m_locationItemInfo) {
@@ -669,7 +682,7 @@ bool ArchipelagoContext::IsLocationChecked(int locId) {
     return false;
 }
 
-void ArchipelagoContext::SetLocationChecked(int locId, bool collected) {
+void ArchipelagoContext::SetLocationChecked(int64_t locId, bool collected) {
     // func was ran before location scouts could be sent out, cache result until scouts return.
     if (!IsReceivedLocationScouts()) {
         instance().m_initLocationCollectState[locId] = collected;
@@ -695,7 +708,7 @@ void ArchipelagoContext::SetLocationChecked(int locId, bool collected) {
     DuskLog.warn("No location found for locId {}.", locId);
 }
 
-void ArchipelagoContext::UpdateLocationState(int locId, bool collected) {
+void ArchipelagoContext::UpdateLocationState(int64_t locId, bool collected) {
     auto& world = instance().m_archiWorld;
 
     for (const auto& [locName, locInfo] : instance().m_locationItemInfo) {
@@ -731,26 +744,28 @@ bool ArchipelagoContext::IsReceivedLocationScouts() {
 
 void ArchipelagoContext::TryHandleDeathLink() {
     if (instance().m_isEnableDeathLink && !instance().m_isFromDeathLink) {
-        // TODO: come up with better death messages
-        AP_DeathLinkSend("%YOU% was unable to become the Hero of Twilight.");
+        nlohmann::json deathData = {
+            {"time", std::time(nullptr)},
+            {"cause", fmt::format("{} was unable to become the Hero of Twilight.",
+                                  instance().m_client->get_slot())},
+            {"source", instance().m_client->get_slot()}
+        };
+        instance().m_client->Bounce(deathData, {}, {}, {"DeathLink"});
     }
 }
 
 bool ArchipelagoContext::TryHandleGameComplete() {
-    // TODO: maybe add support for other game completion types?
-    AP_StoryComplete();
+    instance().m_client->StatusUpdate(APClient::ClientStatus::GOAL);
     return true;
 }
 
 void ArchipelagoContext::RequestAllLocationScout(bool isHint) {
-    std::set<int64_t> locations;
-    // TEMP: apworld has 475 locations with ids in sequential order, so add them all individually to location set
-    // (eventually we will iterate through locations.yaml for a better data-driven solution)
+    std::list<int64_t> locations;
     for (int i = 0; i < 475; i++) {
-        locations.insert(ARCHI_ITEM_OFFSET + i);
+        locations.push_back(ARCHI_ITEM_OFFSET + i);
     }
 
-    AP_SendLocationScouts(locations, isHint);
+    instance().m_client->LocationScouts(locations, isHint ? 1 : 0);
 }
 
 void ArchipelagoContext::RequestPlayerDeath(bool isDeathLink) {
