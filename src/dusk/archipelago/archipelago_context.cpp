@@ -185,25 +185,28 @@ void ArchipelagoContext::LoadTempLocationInfo() {
     }
 }
 
-void ArchipelagoContext::itemRecvImpl(int id, bool notify) {
+bool ArchipelagoContext::itemRecvImpl(int id, bool notify) {
     if (!m_apItemToGameItem.contains(id)) {
         DuskLog.warn("[AP] Got an invalid Item Id: {}", id);
-        return;
+        return true;
     }
 
-    m_isAllowUpdateLocations = true; // guards against triggering UpdateCheckedLocations
+    m_isAllowUpdateLocations = true;
 
     auto& item = m_apItemToGameItem[id];
 
+    bool applied;
     if (notify && item.importance == randomizer::logic::item::Importance::MAJOR) {
         DuskLog.info("[AP] Adding Item: {}", item.itemName);
-        g_randomizerState.addItemToEventQueue(verifyProgressiveItem(item.itemId));
-    }else {
+        applied = g_randomizerState.addItemToEventQueue(item.itemId);
+    } else {
         DuskLog.info("[AP] Silently Adding Item: {}", item.itemName);
         execItemGet(item.itemId);
+        applied = true;
     }
 
     m_isAllowUpdateLocations = false;
+    return applied;
 }
 
 int ArchipelagoContext::getItemIdFromApId(int apId) {

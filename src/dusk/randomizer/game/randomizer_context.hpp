@@ -157,7 +157,7 @@ public:
     int _delete();
     int execute();
     int draw();
-    void addItemToEventQueue(u8 item);
+    bool addItemToEventQueue(u8 item);
     void initGiveItemToPlayer();
     //void handleBonkDamage();
     void handleTimeOfDayChange();
@@ -209,6 +209,8 @@ extern RandomizerState g_randomizerState;
 RandomizerContext& randomizer_GetContext();
 
 bool randomizer_IsActive();
+
+bool randomizer_isSafeForItemGrant();
 
 int randomizer_getItemAtLocation(const std::string& locationName);
 

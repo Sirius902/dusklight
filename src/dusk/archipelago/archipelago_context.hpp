@@ -78,7 +78,7 @@ namespace dusk::archi
 
         void LoadTempLocationInfo();
 
-        void itemRecvImpl(int id, bool notify);
+        bool itemRecvImpl(int id, bool notify);
 
         int getItemIdFromApId(int apId);
 

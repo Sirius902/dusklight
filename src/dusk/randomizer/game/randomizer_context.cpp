@@ -440,6 +440,17 @@ static bool checkFoolishItemEffectReady()
     return true;
 }
 
+bool randomizer_isSafeForItemGrant()
+{
+    if (dComIfGp_getGameoverStatus() != 0)
+        return false;
+    if (!checkFoolishItemEffectReady())
+        return false;
+    if (g_randomizerState.getGiveItemToPlayerStatus() != RandomizerState::QUEUE_EMPTY)
+        return false;
+    return true;
+}
+
 static void handleFoolishItem() {
     u32 count = g_randomizerState.mFoolishItemCount;
     if (count == 0) {
@@ -626,16 +637,18 @@ void RandomizerState::handlePoeItem(u8 bitSw)
     daAlink_getAlinkActorClass()->procWolfAtnActorMoveInit();
 }
 
-void RandomizerState::addItemToEventQueue(u8 item)
+bool RandomizerState::addItemToEventQueue(u8 item)
 {
     for (int i = 0; i < EVENT_ITEM_QUEUE_SIZE; i++)
     {
         if (mEventItemQueue[i] == 0)
         {
             mEventItemQueue[i] = item;
-            break;
+            return true;
         }
     }
+    DuskLog.warn("Event item queue full, dropping item {:02X}", item);
+    return false;
 }
 
 void RandomizerState::initGiveItemToPlayer()
