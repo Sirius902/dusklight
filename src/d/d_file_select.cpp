@@ -44,6 +44,9 @@ constexpr u8 s_pointerMenuSelectTarget = 1;
 constexpr u8 s_pointerCopySelectTarget = 2;
 constexpr u8 s_pointerYesNoSelectTarget = 3;
 }  // namespace
+
+// mSaveData rows are raw byte buffers holding dSv_save_c images
+static_assert(sizeof(dSv_save_c) <= sizeof(SaveDataBuf));
 #endif
 
 static s32 SelStartFrameTbl[3] = {
@@ -1047,9 +1050,13 @@ void dFile_select_c::dataSelectStart() {
         {
             auto& seedHash = dusk::getSettings().randomizer.seedHashes.at(mSelectNum);
             if (seedHash.getValue().empty()) {
-                dSv_save_c* pSave = (dSv_save_c*)&mSaveData[mSelectNum];
-                if (pSave->reserve.isApValid()) {
-                    const char* name = pSave->reserve.getApSeedName();
+                // mSaveData rows aren't 8-byte aligned (0xA94 stride), so copy
+                // the reserve block out instead of casting to dSv_save_c
+                dSv_reserve_c reserve;
+                memcpy(&reserve, mSaveData[mSelectNum] + offsetof(dSv_save_c, reserve),
+                       sizeof(reserve));
+                if (reserve.isApValid()) {
+                    const char* name = reserve.getApSeedName();
                     if (name && name[0] != '\0') {
                         seedHash.setValue(std::string("AP_") + name);
                         dusk::config::Save();
@@ -2897,9 +2904,21 @@ void dFile_select_c::CommandExec() {
 #if TARGET_PC
         {
             auto& seedHashes = dusk::getSettings().randomizer.seedHashes;
-            seedHashes[mCpDataToNum].setValue(seedHashes[mCpDataNum]);
-            auto dstSave = reinterpret_cast<dSv_save_c*>(dstData);
-            dstSave->reserve.init();
+            // An AP file's progress is bound to its server slot, and the
+            // copy's AP block is cleared below; carrying the AP hash over
+            // would present the copy as an AP file with an invalid block.
+            // The copy becomes an ordinary non-AP file instead.
+            if (dusk::archi::ArchipelagoContext::IsSeedHashArchipelago(
+                    seedHashes[mCpDataNum].getValue())) {
+                seedHashes[mCpDataToNum].setValue("");
+            } else {
+                seedHashes[mCpDataToNum].setValue(seedHashes[mCpDataNum]);
+            }
+            // dstData isn't 8-byte aligned (0xA94 stride), so clear the
+            // reserve block via memcpy instead of casting to dSv_save_c
+            dSv_reserve_c clearedReserve{};
+            memcpy(dstData + offsetof(dSv_save_c, reserve), &clearedReserve,
+                   sizeof(clearedReserve));
             mDoMemCdRWm_SetCheckSumGameData((u8*)mSaveData, mCpDataToNum);
             dusk::config::Save();
         }
