@@ -1417,7 +1417,7 @@ void dFile_select_c::selectDataPlayTypeMove() {
         // Only do so when no documents are visible
         if (!dusk::ui::any_document_visible()) {
             bool goBack = mDusk.mBackToFileSelect;
-            if (!goBack &&
+            if (!goBack && mDusk.mArchipelagoPlayType &&
                 dusk::archi::ArchipelagoContext::GetConnectionPhase() !=
                     dusk::archi::ArchipelagoContext::ConnectionPhase::CONNECTED) {
                 dusk::archi::ArchipelagoContext::DisconnectFromServer();
@@ -1459,6 +1459,7 @@ void dFile_select_c::selectDataPlayTypeMove() {
                 .label = "Vanilla",
                 .onPressed = [this](dusk::ui::Modal& modal) {
                     mDusk.mBackToFileSelect = false;
+                    mDusk.mArchipelagoPlayType = false;
                     mDoAud_seStartMenu(Z2SE_SY_CURSOR_OK);
                     modal.hide(true);
                     randomizer_GetContext() = RandomizerContext();
@@ -1479,6 +1480,7 @@ void dFile_select_c::selectDataPlayTypeMove() {
                     dComIfGs_setDataNum(mSelectNum);
 
                     mDusk.mBackToFileSelect = false;
+                    mDusk.mArchipelagoPlayType = true;
                     mDoAud_seStartMenu(Z2SE_SY_CURSOR_OK);
                     modal.hide(true);
                     dusk::ui::BeginArchipelagoConnectionUI(true);
@@ -1497,6 +1499,7 @@ void dFile_select_c::selectDataPlayTypeMove() {
 
         // By default, go back to the file selection after closing the various menus.
         mDusk.mBackToFileSelect = true;
+        mDusk.mArchipelagoPlayType = false;
 
         // Wait 6 frames for the rmlui window transition after it closes
         mDusk.mPendingRmlCloseFrames = 6;

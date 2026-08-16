@@ -777,6 +777,7 @@ RandomizerWindow::RandomizerWindow(dFile_select_c* fileSelect /*= nullptr*/) : m
             .on_pressed([this]{
                 if (mFileSelectMenu) {
                     mFileSelectMenu->mDusk.mBackToFileSelect = false;
+                    mFileSelectMenu->mDusk.mArchipelagoPlayType = false;
                 }
                 mDoAud_seStartMenu(Z2SE_SY_CURSOR_OK);
                 this->hide(true);

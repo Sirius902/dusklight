@@ -744,6 +744,9 @@ public:
         dDlst_FileSelFade_c mFadeDlst;
         bool mStartNameAnm;
         bool mBackToFileSelect;
+        // Set when the Archipelago play type was chosen, so the cancel gate in
+        // selectDataPlayTypeMove only applies to connections in progress
+        bool mArchipelagoPlayType{false};
         bool mArchipelagoBeginConnect;
         bool mArchiStartCloseFile;
         int mPendingRmlCloseFrames{0};
