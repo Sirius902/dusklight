@@ -337,10 +337,13 @@ bool ArchipelagoContext::IsCurrentSeedHash(const std::string& seedStr) {
     return GetArchipelagoSeedName() == seedStr;
 }
 
-void ArchipelagoContext::SetCandidateSaveBlock(int fileNum, const void* saveData) {
+void ArchipelagoContext::SetCandidateSaveBlock(const void* saveData) {
     auto save = static_cast<const dSv_save_c*>(saveData);
     std::memcpy(&instance().m_candidateSaveBlock, &save->reserve, sizeof(dSv_reserve_c));
-    instance().m_candidateFileNum = fileNum;
+}
+
+void ArchipelagoContext::ClearCandidateSaveBlock() {
+    instance().m_candidateSaveBlock.init();
 }
 
 void ArchipelagoContext::InitApSaveBlock() {
@@ -420,10 +423,14 @@ void ArchipelagoContext::ConnectToServer(int file) {
             return;
         }
 
-        if (instance().m_goalReached) {
-            instance().m_client->StatusUpdate(APClient::ClientStatus::GOAL);
-        } else {
-            instance().m_client->StatusUpdate(APClient::ClientStatus::PLAYING);
+        try {
+            if (instance().m_goalReached) {
+                instance().m_client->StatusUpdate(APClient::ClientStatus::GOAL);
+            } else {
+                instance().m_client->StatusUpdate(APClient::ClientStatus::PLAYING);
+            }
+        } catch (const std::exception& e) {
+            DuskLog.error("[AP] Failed to send StatusUpdate: {}", e.what());
         }
 
         instance().m_connectionPhase = ConnectionPhase::SLOT_CONNECTED;
@@ -455,7 +462,8 @@ void ArchipelagoContext::ConnectToServer(int file) {
     client.set_socket_disconnected_handler([]() {
         DuskLog.info("[AP] Socket disconnected.");
         auto phase = instance().m_connectionPhase;
-        if (phase == ConnectionPhase::ERROR)
+        if (phase == ConnectionPhase::ERROR ||
+            phase == ConnectionPhase::INVALID_SAVE)
             return;
         if (phase != ConnectionPhase::IDLE)
             instance().m_connectionPhase = ConnectionPhase::CONNECTING;
@@ -605,6 +613,14 @@ void ArchipelagoContext::ResetSession() {
     instance().m_locallyObtainedThisSession.clear();
     instance().m_resolvedIndexHighWater = 0;
     instance().m_syncRequested = false;
+    instance().m_goalReached = false;
+    instance().m_isUpdateLocations = false;
+    instance().m_needApplyServerState = false;
+    // The candidate save block is intentionally NOT cleared here: file
+    // select captures it before the connect flow runs, and reconnecting
+    // to a different room calls DisconnectFromServer (-> ResetSession)
+    // between that capture and ConnectToServer. It is refreshed on every
+    // file selection and cleared on the new-file path instead.
 }
 
 void ArchipelagoContext::DisconnectFromServer() {
@@ -1119,7 +1135,10 @@ void ArchipelagoContext::LoadRandomizerContext() {
 }
 
 bool ArchipelagoContext::GenerateLocalWorldData() {
-    if (instance().m_archiWorld != nullptr && !instance().m_seedName.empty()) {
+    // Same-seed reconnects keep the already generated world; a different
+    // seed (new room) must regenerate world and context from scratch
+    if (instance().m_archiWorld != nullptr && !instance().m_seedName.empty() &&
+        instance().m_generatedSeedName == instance().m_seedName) {
         return true;
     }
 
@@ -1162,6 +1181,8 @@ bool ArchipelagoContext::GenerateLocalWorldData() {
             return false;
         }
     }
+
+    instance().m_generatedSeedName = instance().m_seedName;
 
     return true;
 }

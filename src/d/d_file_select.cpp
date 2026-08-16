@@ -1011,6 +1011,10 @@ void dFile_select_c::dataSelectStart() {
         modoruTxtChange(1);
 
 #if TARGET_PC
+        // A new file has no existing save block to validate a connection
+        // against; drop any candidate left over from browsing another file
+        dusk::archi::ArchipelagoContext::ClearCandidateSaveBlock();
+
         mDataSelProc = DATASELPROC_SELECT_DATA_PLAY_MOVE;
         mDusk.mStartNameAnm = false;
 #else
@@ -1038,8 +1042,7 @@ void dFile_select_c::dataSelectStart() {
         headerTxtSet(msgTbl[mSelectNum], 1, 0);
         makeRecInfo(mSelectNum);
 
-        dusk::archi::ArchipelagoContext::SetCandidateSaveBlock(
-            mSelectNum, &mSaveData[mSelectNum]);
+        dusk::archi::ArchipelagoContext::SetCandidateSaveBlock(&mSaveData[mSelectNum]);
 
         {
             auto& seedHash = dusk::getSettings().randomizer.seedHashes.at(mSelectNum);

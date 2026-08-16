@@ -73,7 +73,6 @@ namespace dusk::archi
         // Per-save cursor
         uint64_t m_seedSlotKey = 0;
         dSv_reserve_c m_candidateSaveBlock{};
-        int m_candidateFileNum = -1;
         std::set<int64_t> m_locallyObtainedThisSession;
         uint32_t m_resolvedIndexHighWater = 0;
         bool m_syncRequested = false;
@@ -81,6 +80,9 @@ namespace dusk::archi
         // Rando Data
         randomizer::seedgen::config::Config m_config;
         std::unique_ptr<randomizer::logic::world::World> m_archiWorld = nullptr;
+        // Seed the current m_archiWorld was generated from; lives as long as
+        // the world so a reconnect to a different room regenerates it
+        std::string m_generatedSeedName;
         bool m_isUpdateLocations = false;
         bool m_isAllowUpdateLocations = false;
         bool m_needApplyServerState = false;
@@ -168,7 +170,9 @@ namespace dusk::archi
 
         // State Requesters
 
-        static void SetCandidateSaveBlock(int fileNum, const void* saveData);
+        static void SetCandidateSaveBlock(const void* saveData);
+
+        static void ClearCandidateSaveBlock();
 
         static void InitApSaveBlock();
 
