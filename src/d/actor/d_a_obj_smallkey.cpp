@@ -341,6 +341,14 @@ int daKey_c::initActionOrderGetDemo() {
 int daKey_c::actionOrderGetDemo() {
     if (eventInfo.checkCommandItem()) {
         setStatus(STATUS_GET_DEMO_e);
+#if TARGET_PC
+        // This key's location (Forest Temple Big Baba Key) is detected via
+        // its tbox flag, which actionGetDemo only writes at demo end and
+        // which has no tracker bridge slot; write the real flag at pickup
+        if (randomizer_IsActive()) {
+            dComIfGs_onTbox(getSaveBitNo());
+        }
+#endif
         if (mItemId != fpcM_ERROR_PROCESS_ID_e) {
             dComIfGp_event_setItemPartnerId(mItemId);
         }

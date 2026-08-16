@@ -506,6 +506,13 @@ int daObjLife_c::actionOrderGetDemo() {
         if (randomizer_IsActive()) {
             g_randomizerState.mTrackerTempItemFlag.flag = getSaveBitNo();
             g_randomizerState.mTrackerTempItemFlag.stage = getStageSaveId(getStageID());
+
+            // Golden wolf replacements are detected via their event flag,
+            // which actionGetDemo only writes at demo end; bridge it now so
+            // the check reports at pickup
+            if (mGoldenWolfEventFlag != 0xFFFF) {
+                g_randomizerState.mTrackerTempEventFlag = mGoldenWolfEventFlag;
+            }
         }
 #endif
 

@@ -360,6 +360,18 @@ int daTagStatue_c::demoProc() {
                     u8 roomNo = dStage_roomControl_c::mStayNo;
                     u16 key = (stageIdx << 8) | roomNo;
                     item = verifyProgressiveItem(randomizer_GetContext().mSkyCharacterOverrides[key]);
+
+                    // The real flags are only written at demo end in
+                    // actionEvent; bridge them now so the check reports at
+                    // pickup. The Amphitheater statue is detected via its
+                    // switch flag, the other five via their event flags.
+                    if (mSkyCharacterEventBitIdIndex == TAG_LOCATION_RUINED_THEATRE) {
+                        g_randomizerState.mTrackerTempSwitchFlag.stage = getStageSaveId(getStageID());
+                        g_randomizerState.mTrackerTempSwitchFlag.flag = getSwbit2();
+                    } else {
+                        g_randomizerState.mTrackerTempEventFlag =
+                            l_event_bit[mSkyCharacterEventBitIdIndex];
+                    }
                 } else {
 #endif
                     // If the player already has 5 Sky Characters, reward them with the completed

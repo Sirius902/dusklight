@@ -371,6 +371,7 @@ int RandomizerState::_create() {
     mInitialized = true;
     mEventItemStatus = QUEUE_EMPTY;
     mHasPendingToDChange = false;
+    mTrackerTempEventFlag = 0;
     mTrackerTempSwitchFlag = {-1, -1};
     mTrackerTempItemFlag = {-1, -1};
     for (int i = 0; i < EVENT_ITEM_QUEUE_SIZE; i++) {
