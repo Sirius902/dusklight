@@ -745,7 +745,7 @@ void ArchipelagoContext::resolveReceivedItems() {
             continue;
         }
 
-        if (entry.notify && entry.location != -1 &&
+        if (entry.location != -1 &&
             inst.m_locallyObtainedThisSession.contains(entry.location)) {
             commitCursor(entry);
             resolved++;
