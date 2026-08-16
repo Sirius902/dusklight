@@ -440,6 +440,18 @@ void ArchipelagoContext::ConnectToServer(int file) {
             DuskLog.error("[AP] Failed to send StatusUpdate: {}", e.what());
         }
 
+        // Re-send checks that never got a server echo (dropped sends from
+        // the previous connection); bounded to re-authentication only
+        if (!instance().m_pendingLocationChecks.empty()) {
+            std::list<int64_t> pending(instance().m_pendingLocationChecks.begin(),
+                                       instance().m_pendingLocationChecks.end());
+            try {
+                instance().m_client->LocationChecks(pending);
+            } catch (const std::exception& e) {
+                DuskLog.error("[AP] Failed to resend LocationChecks: {}", e.what());
+            }
+        }
+
         instance().m_connectionPhase = ConnectionPhase::SLOT_CONNECTED;
         instance().m_connectStartTime = std::chrono::steady_clock::now();
 
@@ -622,6 +634,7 @@ void ArchipelagoContext::ResetSession() {
     instance().m_seedSlotKey = 0;
     instance().m_SettingsFile.clear();
     instance().m_locallyObtainedThisSession.clear();
+    instance().m_pendingLocationChecks.clear();
     instance().m_resolvedIndexHighWater = 0;
     instance().m_syncRequested = false;
     instance().m_goalReached = false;
@@ -858,10 +871,13 @@ void ArchipelagoContext::UpdateCheckedLocations() {
 
         bool isCollected = isLocationObtained(location);
 
-        if (isCollected && !cachedLocData.collected) {
-            cachedLocData.collected = true;
+        // collected is only set once the server echoes the check back;
+        // until then the pending set keeps the sweep from resending it
+        if (isCollected && !cachedLocData.collected &&
+            !instance().m_pendingLocationChecks.contains(cachedLocData.apLocationId)) {
             batch.push_back(cachedLocData.apLocationId);
             instance().m_locallyObtainedThisSession.insert(cachedLocData.apLocationId);
+            instance().m_pendingLocationChecks.insert(cachedLocData.apLocationId);
         }
     }
 
@@ -886,6 +902,9 @@ void ArchipelagoContext::SetLocationChecked(int64_t locId, bool collected) {
     }
 
     if (!collected) return;
+
+    // The server has acknowledged this check; it no longer needs a resend
+    instance().m_pendingLocationChecks.erase(locId);
 
     for (auto& [locName, locInfo] : instance().m_locationItemInfo) {
         if (locInfo.apLocationId == locId) {

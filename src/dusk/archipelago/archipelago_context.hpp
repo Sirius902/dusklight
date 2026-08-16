@@ -80,6 +80,8 @@ namespace dusk::archi
         // for a save this session refuses to touch
         bool m_saveRefused = false;
         std::set<int64_t> m_locallyObtainedThisSession;
+        // Sent to the server but not yet echoed back; resent on re-auth
+        std::set<int64_t> m_pendingLocationChecks;
         uint32_t m_resolvedIndexHighWater = 0;
         bool m_syncRequested = false;
 

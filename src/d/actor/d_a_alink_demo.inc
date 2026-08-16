@@ -4319,7 +4319,10 @@ int daAlink_c::procGanonFinishInit() {
         }
     }
 
-    if (dusk::archi::ArchipelagoContext::IsConnected()) {
+    // Latch the goal whenever an AP seed is being played, connected or not;
+    // slot_connected re-sends it on the next (re)connection
+    if (randomizer_IsActive() &&
+        dusk::archi::ArchipelagoContext::IsSeedHashArchipelago(randomizer_GetContext().mHash)) {
         dusk::archi::ArchipelagoContext::TryHandleGameComplete();
     }
 #endif
