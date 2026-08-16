@@ -1617,6 +1617,13 @@ void dFile_select_c::menuSelectStart() {
 
     if (mSelectMenuNum == 1) {
         dComIfGs_setCardToMemory((u8*)mSaveData, mSelectNum);
+#if TARGET_PC
+        // Validate the freshly loaded block against the live AP session:
+        // initialize a missing AP block, refuse a seed/slot key mismatch, and
+        // request a resync when the on-disk cursor reverted below this
+        // session's high-water mark
+        dusk::archi::ArchipelagoContext::validateSaveCursor();
+#endif
         mIsSelectEnd = true;
         mDataSelProc = DATASELPROC_NEXT_MODE_WAIT;
         dComIfGs_setDataNum(mSelectNum);

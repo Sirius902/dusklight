@@ -108,8 +108,6 @@ namespace dusk::archi
         bool tryKillPlayer();
 
         void resolveReceivedItems();
-
-        bool validateSaveCursor();
     public:
         ArchipelagoContext();
 
@@ -170,6 +168,8 @@ namespace dusk::archi
         static void SetCandidateSaveBlock(int fileNum, const void* saveData);
 
         static void InitApSaveBlock();
+
+        static bool validateSaveCursor();
 
         static void RequestAllLocationScout();
 

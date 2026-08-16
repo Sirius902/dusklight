@@ -428,6 +428,15 @@ void ArchipelagoContext::ConnectToServer(int file) {
 
         instance().m_connectionPhase = ConnectionPhase::SLOT_CONNECTED;
         instance().m_connectStartTime = std::chrono::steady_clock::now();
+
+        // On an in-game reconnect a save is already loaded; revalidate the
+        // loaded block (not the file-select candidate) so a reverted cursor
+        // triggers a resync
+        if (randomizer_IsActive() &&
+            IsCurrentSeedHash(randomizer_GetContext().mHash)) {
+            validateSaveCursor();
+        }
+
         RequestAllLocationScout();
     });
 
@@ -653,6 +662,9 @@ ArchipelagoContext::ConnectionPhase ArchipelagoContext::GetConnectionPhase() {
 }
 
 bool ArchipelagoContext::validateSaveCursor() {
+    // Only validate the loaded block against a live AP session
+    if (!IsConnected()) return true;
+
     auto dataNum = dComIfGs_getDataNum();
     auto& save = g_dComIfG_gameInfo.info.getSavedata();
     auto& reserve = save.reserve;
@@ -667,6 +679,7 @@ bool ArchipelagoContext::validateSaveCursor() {
 
     if (reserve.getApSeedSlotKey() != instance().m_seedSlotKey) {
         DuskLog.error("[AP] Save file seed-slot key mismatch.");
+        instance().m_connectionPhase = ConnectionPhase::INVALID_SAVE;
         return false;
     }
 
@@ -692,6 +705,11 @@ void ArchipelagoContext::resolveReceivedItems() {
 
     auto& save = g_dComIfG_gameInfo.info.getSavedata();
     auto& reserve = save.reserve;
+
+    // Don't resolve against an uninitialized block; the cursor would read as
+    // garbage. Items stay queued until the save's AP block exists.
+    if (!reserve.isApValid()) return;
+
     u32 cursor = reserve.getApAppliedCount();
 
     size_t resolved = 0;
