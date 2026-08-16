@@ -650,6 +650,8 @@ bool RandomizerState::addItemToEventQueue(u8 item)
             return true;
         }
     }
+    // Deliberately kept as a warn: the AP resolve path retries a refused
+    // enqueue, and this is the only diagnostic for a full queue elsewhere
     DuskLog.warn("Event item queue full, dropping item {:02X}", item);
     return false;
 }

@@ -925,6 +925,14 @@ public:
 class dSv_reserve_c {
 public:
 #if TARGET_PC
+    // Archipelago per-save state lives in the vanilla reserve block. The
+    // whole dSv_save_c image, this block included, is memcpy'd into the
+    // quest-log buffer on save (dSv_info_c::memory_to_card) and covered by
+    // the card checksum, so these fields persist like any other save data.
+    //
+    // Note this diverges from GCN initialization: TARGET_PC value-
+    // initializes the block via the member initializers below, while the
+    // vanilla game never writes the reserve area at all.
     static constexpr u32 AP_MAGIC = 0x41505450;
     static constexpr u16 AP_VERSION = 1;
 
@@ -953,7 +961,7 @@ public:
 private:
     /* 0x00 */ BE<u32> mApMagic{};
     /* 0x04 */ BE<u16> mApVersion{};
-    /* 0x06 */ BE<u16> mApFlags{};
+    /* 0x06 */ BE<u16> mApFlags{};  // reserved for future use; always 0 in AP_VERSION 1
     /* 0x08 */ BE<u64> mApSeedSlotKey{};
     /* 0x10 */ BE<u32> mApAppliedCount{};
     /* 0x14 */ char mApSeedName[40]{};
