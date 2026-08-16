@@ -73,6 +73,12 @@ namespace dusk::archi
         // Per-save cursor
         uint64_t m_seedSlotKey = 0;
         dSv_reserve_c m_candidateSaveBlock{};
+        // Distinguishes "existing file selected" from "no/new file"; a
+        // vanilla file's reserve block is all zeroes either way
+        bool m_hasCandidateSaveBlock = false;
+        // Latched with INVALID_SAVE so items_received stops enqueueing
+        // for a save this session refuses to touch
+        bool m_saveRefused = false;
         std::set<int64_t> m_locallyObtainedThisSession;
         uint32_t m_resolvedIndexHighWater = 0;
         bool m_syncRequested = false;

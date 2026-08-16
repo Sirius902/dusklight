@@ -17,7 +17,9 @@ ArchiConnectModal::ArchiConnectModal() :
            auto phase = archi::ArchipelagoContext::GetConnectionPhase();
            if (phase == archi::ArchipelagoContext::ConnectionPhase::CONNECTING ||
                phase == archi::ArchipelagoContext::ConnectionPhase::SLOT_CONNECTED ||
-               phase == archi::ArchipelagoContext::ConnectionPhase::GENERATING) {
+               phase == archi::ArchipelagoContext::ConnectionPhase::GENERATING ||
+               phase == archi::ArchipelagoContext::ConnectionPhase::ERROR ||
+               phase == archi::ArchipelagoContext::ConnectionPhase::INVALID_SAVE) {
                archi::ArchipelagoContext::DisconnectFromServer();
            }
            mDoAud_seStartMenu(kSoundWindowClose);

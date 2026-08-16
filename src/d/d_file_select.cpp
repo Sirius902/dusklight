@@ -1538,6 +1538,17 @@ void dFile_select_c::menuArchipelagoConnect() {
             mDusk.mPendingRmlCloseFrames -= 1;
         }
         if (mDusk.mPendingRmlCloseFrames == 0) {
+            // Only a completed connection may open the file; an aborted,
+            // failed, or refused one goes back to file selection
+            auto phase = dusk::archi::ArchipelagoContext::GetConnectionPhase();
+            if (phase == dusk::archi::ArchipelagoContext::ConnectionPhase::IDLE ||
+                phase == dusk::archi::ArchipelagoContext::ConnectionPhase::ERROR ||
+                phase == dusk::archi::ArchipelagoContext::ConnectionPhase::INVALID_SAVE) {
+                dusk::archi::ArchipelagoContext::DisconnectFromServer();
+                menuSelectCansel();
+                return;
+            }
+
             mDusk.mArchiStartCloseFile = true;
 
             selectDataMoveAnmInitSet(SelOpenStartFrameTbl[mSelectNum], SelOpenEndFrameTbl[mSelectNum]);

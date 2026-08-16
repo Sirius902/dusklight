@@ -340,10 +340,12 @@ bool ArchipelagoContext::IsCurrentSeedHash(const std::string& seedStr) {
 void ArchipelagoContext::SetCandidateSaveBlock(const void* saveData) {
     auto save = static_cast<const dSv_save_c*>(saveData);
     std::memcpy(&instance().m_candidateSaveBlock, &save->reserve, sizeof(dSv_reserve_c));
+    instance().m_hasCandidateSaveBlock = true;
 }
 
 void ArchipelagoContext::ClearCandidateSaveBlock() {
     instance().m_candidateSaveBlock.init();
+    instance().m_hasCandidateSaveBlock = false;
 }
 
 void ArchipelagoContext::InitApSaveBlock() {
@@ -415,11 +417,16 @@ void ArchipelagoContext::ConnectToServer(int file) {
         instance().m_seedSlotKey = computeSeedSlotKey(
             instance().m_seedName, instance().m_slotName);
 
+        // An existing file must carry a valid AP block bound to this exact
+        // seed/slot. Refuse every other class: garbage or vanilla block,
+        // version mismatch, or a block bound to a different seed/slot.
         auto& candidate = instance().m_candidateSaveBlock;
-        if (candidate.isApValid() &&
-            candidate.getApSeedSlotKey() != instance().m_seedSlotKey) {
-            DuskLog.error("[AP] Save file is bound to a different seed/slot.");
+        if (instance().m_hasCandidateSaveBlock &&
+            (!candidate.isApValid() ||
+             candidate.getApSeedSlotKey() != instance().m_seedSlotKey)) {
+            DuskLog.error("[AP] Save file is not valid for this seed/slot.");
             instance().m_connectionPhase = ConnectionPhase::INVALID_SAVE;
+            instance().m_saveRefused = true;
             return;
         }
 
@@ -471,6 +478,9 @@ void ArchipelagoContext::ConnectToServer(int file) {
 
     client.set_items_received_handler([](const std::list<APClient::NetworkItem>& items) {
         auto& inst = instance();
+
+        // A refused save must not accumulate items it will never apply
+        if (inst.m_saveRefused) return;
 
         for (const auto& item : items) {
             if (item.index < 0) continue;
@@ -595,6 +605,7 @@ void ArchipelagoContext::ConnectToServer(int file) {
     instance().m_connectStartTime = std::chrono::steady_clock::now();
     instance().m_hasEverConnected = false;
     instance().m_pendingDisconnect = false;
+    instance().m_saveRefused = false;
 }
 
 void ArchipelagoContext::ResetSession() {
@@ -616,6 +627,7 @@ void ArchipelagoContext::ResetSession() {
     instance().m_goalReached = false;
     instance().m_isUpdateLocations = false;
     instance().m_needApplyServerState = false;
+    instance().m_saveRefused = false;
     // The candidate save block is intentionally NOT cleared here: file
     // select captures it before the connect flow runs, and reconnecting
     // to a different room calls DisconnectFromServer (-> ResetSession)
@@ -696,6 +708,7 @@ bool ArchipelagoContext::validateSaveCursor() {
     if (reserve.getApSeedSlotKey() != instance().m_seedSlotKey) {
         DuskLog.error("[AP] Save file seed-slot key mismatch.");
         instance().m_connectionPhase = ConnectionPhase::INVALID_SAVE;
+        instance().m_saveRefused = true;
         return false;
     }
 
