@@ -158,6 +158,13 @@ public:
     int execute();
     int draw();
     bool addItemToEventQueue(u8 item);
+    bool isEventItemQueueEmpty() const {
+        for (int i = 0; i < EVENT_ITEM_QUEUE_SIZE; i++) {
+            if (mEventItemQueue[i] != 0)
+                return false;
+        }
+        return true;
+    }
     void initGiveItemToPlayer();
     //void handleBonkDamage();
     void handleTimeOfDayChange();

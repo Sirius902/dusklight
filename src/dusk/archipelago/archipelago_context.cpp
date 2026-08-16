@@ -712,6 +712,16 @@ void ArchipelagoContext::resolveReceivedItems() {
 
     u32 cursor = reserve.getApAppliedCount();
 
+    auto commitCursor = [&](const ReceivedItem& entry) {
+        u32 newCursor = static_cast<u32>(entry.index + 1);
+        if (newCursor > cursor) {
+            cursor = newCursor;
+            reserve.setApAppliedCount(cursor);
+        }
+        if (newCursor > inst.m_resolvedIndexHighWater)
+            inst.m_resolvedIndexHighWater = newCursor;
+    };
+
     size_t resolved = 0;
     for (auto& entry : inst.m_receivedItemsQueue) {
         if (entry.index < 0) {
@@ -724,30 +734,45 @@ void ArchipelagoContext::resolveReceivedItems() {
             continue;
         }
 
-        if (entry.notify && entry.location != -1 &&
-            inst.m_locallyObtainedThisSession.contains(entry.location)) {
-            u32 newCursor = static_cast<u32>(entry.index + 1);
-            if (newCursor > cursor) {
-                cursor = newCursor;
-                reserve.setApAppliedCount(cursor);
-            }
-            if (newCursor > inst.m_resolvedIndexHighWater)
-                inst.m_resolvedIndexHighWater = newCursor;
+        if (entry.enqueued) {
+            // The entry's get-item demo was started on an earlier pass. Only
+            // once the event item queue has fully drained is the grant known
+            // to have completed and the cursor safe to commit.
+            if (!g_randomizerState.isEventItemQueueEmpty())
+                break;
+            commitCursor(entry);
             resolved++;
             continue;
+        }
+
+        if (entry.notify && entry.location != -1 &&
+            inst.m_locallyObtainedThisSession.contains(entry.location)) {
+            commitCursor(entry);
+            resolved++;
+            continue;
+        }
+
+        // Notify-worthy MAJOR items go through the get-item demo queue and
+        // must not commit the cursor at enqueue time: a save+quit before the
+        // demo grants would otherwise lose the item permanently.
+        bool viaQueue = entry.notify &&
+            inst.m_apItemToGameItem.contains(entry.itemId) &&
+            inst.m_apItemToGameItem[entry.itemId].importance ==
+                randomizer::logic::item::Importance::MAJOR;
+
+        if (viaQueue) {
+            if (inst.itemRecvImpl(entry.itemId, entry.notify)) {
+                entry.enqueued = true;
+            }
+            // Wait for the demo before committing or granting later items
+            break;
         }
 
         if (!inst.itemRecvImpl(entry.itemId, entry.notify)) {
             break;
         }
 
-        u32 newCursor = static_cast<u32>(entry.index + 1);
-        if (newCursor > cursor) {
-            cursor = newCursor;
-            reserve.setApAppliedCount(cursor);
-        }
-        if (newCursor > inst.m_resolvedIndexHighWater)
-            inst.m_resolvedIndexHighWater = newCursor;
+        commitCursor(entry);
         resolved++;
     }
 

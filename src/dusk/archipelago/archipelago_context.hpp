@@ -17,6 +17,9 @@ namespace dusk::archi
         bool notify = false;
         int player = -1;
         int64_t location = -1;
+        // The item went into the get-item demo queue; the cursor commits only
+        // once that queue drains (the demo completed and the grant is real)
+        bool enqueued = false;
     };
 
     class ArchipelagoContext {
