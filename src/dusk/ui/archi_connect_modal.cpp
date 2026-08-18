@@ -80,13 +80,24 @@ void ArchiConnectModal::update() {
         set_icon("error");
         set_body("Failed to Connect to server.");
         add_action({
-            .label = "OK",
+            .label = "Retry",
             .onPressed = [](Modal& modal) {
                 mDoAud_seStartMenu(kSoundWindowClose);
                 modal.pop(false);
 
                 // show connection setup modal on failure
                 CreateSetupConnectionInfoModal();
+            }
+        });
+        add_action({
+            .label = "Play Offline",
+            .onPressed = [](Modal& modal) {
+                // open the file with its locally stored seed data; checks
+                // made offline are sent on the next connected session
+                archi::ArchipelagoContext::RequestOfflinePlay();
+                archi::ArchipelagoContext::DisconnectFromServer();
+                mDoAud_seStartMenu(kSoundWindowClose);
+                modal.pop(false);
             }
         });
         focus();
@@ -98,6 +109,17 @@ void ArchiConnectModal::update() {
         add_action({
             .label = "OK",
             .onPressed = [](Modal& modal) {
+                archi::ArchipelagoContext::DisconnectFromServer();
+                mDoAud_seStartMenu(kSoundWindowClose);
+                modal.pop(false);
+            }
+        });
+        add_action({
+            .label = "Play Offline",
+            .onPressed = [](Modal& modal) {
+                // the save is valid on its own; only this session's
+                // seed/slot doesn't match it
+                archi::ArchipelagoContext::RequestOfflinePlay();
                 archi::ArchipelagoContext::DisconnectFromServer();
                 mDoAud_seStartMenu(kSoundWindowClose);
                 modal.pop(false);
@@ -165,6 +187,10 @@ void CreateSetupConnectionInfoModal() {
 }
 
 void BeginArchipelagoConnectionUI(bool forceChangeConnection) {
+    // A stale offline request from an earlier flow must not turn a plain
+    // cancel into an offline open
+    archi::ArchipelagoContext::ClearOfflinePlayRequest();
+
     if (forceChangeConnection) {
         CreateSetupConnectionInfoModal();
         return;

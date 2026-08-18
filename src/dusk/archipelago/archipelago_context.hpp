@@ -81,6 +81,9 @@ namespace dusk::archi
         // Latched with INVALID_SAVE so items_received stops enqueueing
         // for a save this session refuses to touch
         bool m_saveRefused = false;
+        // The player chose to open the file without a session after a
+        // failed or refused connection; consumed by the file select flow
+        bool m_offlinePlayRequested = false;
         std::set<int64_t> m_locallyObtainedThisSession;
         // Sent to the server but not yet echoed back; resent on re-auth
         std::set<int64_t> m_pendingLocationChecks;
@@ -187,6 +190,16 @@ namespace dusk::archi
         static void InitApSaveBlock();
 
         static bool validateSaveCursor();
+
+        // Offline play of an existing AP file (no session required)
+
+        static void RequestOfflinePlay();
+
+        static bool ConsumeOfflinePlayRequest();
+
+        static void ClearOfflinePlayRequest();
+
+        static bool LoadOfflineRandomizerContext(const std::string& seedHash);
 
         static void RequestAllLocationScout();
 

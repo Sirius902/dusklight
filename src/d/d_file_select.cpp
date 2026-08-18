@@ -1553,12 +1553,39 @@ void dFile_select_c::menuArchipelagoConnect() {
             mDusk.mPendingRmlCloseFrames -= 1;
         }
         if (mDusk.mPendingRmlCloseFrames == 0) {
-            // Only a completed connection may open the file; an aborted,
-            // failed, or refused one goes back to file selection
             auto phase = dusk::archi::ArchipelagoContext::GetConnectionPhase();
-            if (phase == dusk::archi::ArchipelagoContext::ConnectionPhase::IDLE ||
-                phase == dusk::archi::ArchipelagoContext::ConnectionPhase::ERROR ||
-                phase == dusk::archi::ArchipelagoContext::ConnectionPhase::INVALID_SAVE) {
+            bool playOffline =
+                dusk::archi::ArchipelagoContext::ConsumeOfflinePlayRequest() &&
+                phase != dusk::archi::ArchipelagoContext::ConnectionPhase::CONNECTED;
+
+            if (playOffline) {
+                // The player chose to play without a session; load the file's
+                // seed data from local storage. Checks made offline are read
+                // back from the save flags on the next connected session, and
+                // the per-save cursor replays items received meanwhile.
+                auto curFileSeedHash =
+                    dusk::getSettings().randomizer.seedHashes.at(mSelectNum).getValue();
+                if (curFileSeedHash != randomizer_GetContext().mHash ||
+                    g_randomizerState.mFileNum != mSelectNum) {
+                    g_randomizerState = RandomizerState();
+                    if (!dusk::archi::ArchipelagoContext::LoadOfflineRandomizerContext(
+                            curFileSeedHash)) {
+                        dusk::ui::push_toast({
+                            .title = "Archipelago",
+                            .content = "No local seed data for this file. Connect to the "
+                                       "server once to download it.",
+                            .duration = std::chrono::seconds(5),
+                        });
+                        dusk::archi::ArchipelagoContext::DisconnectFromServer();
+                        menuSelectCansel();
+                        return;
+                    }
+                }
+                dusk::archi::ArchipelagoContext::DisconnectFromServer();
+            } else if (phase != dusk::archi::ArchipelagoContext::ConnectionPhase::CONNECTED) {
+                // Only a completed connection (or an explicit offline choice)
+                // may open the file; an aborted, failed, or refused one goes
+                // back to file selection
                 dusk::archi::ArchipelagoContext::DisconnectFromServer();
                 menuSelectCansel();
                 return;

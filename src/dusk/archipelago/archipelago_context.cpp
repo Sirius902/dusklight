@@ -357,6 +357,49 @@ void ArchipelagoContext::InitApSaveBlock() {
     DuskLog.info("[AP] Initialized AP save block for new file.");
 }
 
+void ArchipelagoContext::RequestOfflinePlay() {
+    instance().m_offlinePlayRequested = true;
+}
+
+bool ArchipelagoContext::ConsumeOfflinePlayRequest() {
+    bool requested = instance().m_offlinePlayRequested;
+    instance().m_offlinePlayRequested = false;
+    return requested;
+}
+
+void ArchipelagoContext::ClearOfflinePlayRequest() {
+    instance().m_offlinePlayRequested = false;
+}
+
+bool ArchipelagoContext::LoadOfflineRandomizerContext(const std::string& seedHash) {
+    if (!IsSeedHashArchipelago(seedHash)) return false;
+
+    // The session path helpers need a live connection; derive the seed
+    // directory from the hash itself, which the directory is named after
+    auto seedPath = ui::GetRandomizerPath() / "archipelago" / seedHash / "seed.dat";
+    if (!std::filesystem::exists(seedPath)) {
+        DuskLog.error("[AP] No local seed data for {}; the file must connect once to create it.",
+                      seedHash);
+        return false;
+    }
+
+    randomizer_GetContext() = RandomizerContext();
+    try {
+        auto loadError = randomizer_GetContext().LoadFromPath(seedPath);
+        if (loadError.has_value()) {
+            DuskLog.error("[AP] Failed to load local seed data: {}", loadError.value());
+            randomizer_GetContext() = RandomizerContext();
+            return false;
+        }
+    } catch (const std::exception& e) {
+        DuskLog.error("[AP] Failed to load local seed data: {}", e.what());
+        randomizer_GetContext() = RandomizerContext();
+        return false;
+    }
+    randomizer_GetContext().mHash = seedHash;
+    return true;
+}
+
 void ArchipelagoContext::ConnectToServer(int file) {
     config::Save();
 
@@ -618,6 +661,7 @@ void ArchipelagoContext::ConnectToServer(int file) {
     instance().m_hasEverConnected = false;
     instance().m_pendingDisconnect = false;
     instance().m_saveRefused = false;
+    instance().m_offlinePlayRequested = false;
 }
 
 void ArchipelagoContext::ResetSession() {
