@@ -21,6 +21,8 @@ namespace dusk::ui
         void update() override;
 
     private:
+        void show_connection_failure(const Rml::String& message, bool playErrorSound = true);
+
         ConnectionStatus mDisplayedStatus = ConnectionStatus::None;
     };
 

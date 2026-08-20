@@ -17,8 +17,12 @@ ArchiConnectModal::ArchiConnectModal() :
            auto phase = archi::ArchipelagoContext::GetConnectionPhase();
            if (phase == archi::ArchipelagoContext::ConnectionPhase::CONNECTING ||
                phase == archi::ArchipelagoContext::ConnectionPhase::SLOT_CONNECTED ||
-               phase == archi::ArchipelagoContext::ConnectionPhase::GENERATING ||
-               phase == archi::ArchipelagoContext::ConnectionPhase::ERROR ||
+               phase == archi::ArchipelagoContext::ConnectionPhase::GENERATING) {
+               archi::ArchipelagoContext::DisconnectFromServer();
+               show_connection_failure("Connection canceled.", false);
+               return;
+           }
+           if (phase == archi::ArchipelagoContext::ConnectionPhase::ERROR ||
                phase == archi::ArchipelagoContext::ConnectionPhase::INVALID_SAVE) {
                archi::ArchipelagoContext::DisconnectFromServer();
            }
@@ -28,6 +32,37 @@ ArchiConnectModal::ArchiConnectModal() :
        .icon = "verifying",
     }) {
     mRoot->SetProperty("white-space", "pre-line");
+}
+
+void ArchiConnectModal::show_connection_failure(const Rml::String& message, bool playErrorSound) {
+    if (playErrorSound) {
+        mDoAud_seStartMenu(kSoundSeedGenerateError);
+    }
+    set_icon("error");
+    set_body(message);
+    add_action({
+        .label = "Retry",
+        .onPressed = [](Modal& modal) {
+            mDoAud_seStartMenu(kSoundWindowClose);
+            modal.pop(false);
+
+            // Show the connection setup modal on failure or cancellation.
+            CreateSetupConnectionInfoModal();
+        }
+    });
+    add_action({
+        .label = "Play Offline",
+        .onPressed = [](Modal& modal) {
+            // Open the file with its locally stored seed data; checks made
+            // offline are sent on the next connected session.
+            archi::ArchipelagoContext::RequestOfflinePlay();
+            archi::ArchipelagoContext::DisconnectFromServer();
+            mDoAud_seStartMenu(kSoundWindowClose);
+            modal.pop(false);
+        }
+    });
+    focus();
+    mDisplayedStatus = ConnectionStatus::Ready;
 }
 
 void ArchiConnectModal::update() {
@@ -76,32 +111,7 @@ void ArchiConnectModal::update() {
         focus();
         mDisplayedStatus = ConnectionStatus::Ready;
     } else if (currentStatus == ConnectionStatus::Error) {
-        mDoAud_seStartMenu(kSoundSeedGenerateError);
-        set_icon("error");
-        set_body("Failed to Connect to server.");
-        add_action({
-            .label = "Retry",
-            .onPressed = [](Modal& modal) {
-                mDoAud_seStartMenu(kSoundWindowClose);
-                modal.pop(false);
-
-                // show connection setup modal on failure
-                CreateSetupConnectionInfoModal();
-            }
-        });
-        add_action({
-            .label = "Play Offline",
-            .onPressed = [](Modal& modal) {
-                // open the file with its locally stored seed data; checks
-                // made offline are sent on the next connected session
-                archi::ArchipelagoContext::RequestOfflinePlay();
-                archi::ArchipelagoContext::DisconnectFromServer();
-                mDoAud_seStartMenu(kSoundWindowClose);
-                modal.pop(false);
-            }
-        });
-        focus();
-        mDisplayedStatus = ConnectionStatus::Ready;
+        show_connection_failure("Failed to Connect to server.");
     } else if (currentStatus == ConnectionStatus::InvalidSave) {
         mDoAud_seStartMenu(kSoundSeedGenerateError);
         set_icon("error");
